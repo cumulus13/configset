@@ -5,7 +5,8 @@ import os
 import traceback
 import re
 from collections import OrderedDict
-from debug2 import * 
+import inspect
+# from debug import debug 
 # from make_colors import make_colors
 
 __sdk__ = '2.7'
@@ -14,6 +15,9 @@ __url__ = 'licface@yahoo.com'
 __build__ = '2.7'
 
 configname ='conf.ini'
+PATH = ''
+if PATH:
+    configname = os.path.join(PATH, os.path.basename(configname))
 
 class MultiOrderedDict(OrderedDict):
     def __setitem__(self, key, value):
@@ -28,61 +32,77 @@ class configset(object):
     cfg.optionxform = str
     THIS_PATH = os.path.dirname(__file__)
     # configname ='conf.ini'
-    # debug(configname = configname)
+    # #debug(configname = configname)
     
     def __init__(self):
         super(configset, self)
         global configname
+        global PATH
         self.configname = configname
+        if self.configname:
+            configname = self.configname
+
+        self.path = None
+        if not self.path:
+            self.path = os.path.dirname(inspect.stack()[0][1])
+        if PATH:
+            self.path = PATH
+        # debug(self_path = self.path)
+        
+        configname = os.path.join(self.path, os.path.basename(configname))
+        # debug(configname=configname)
     
     def get_config_file(self, filename='', verbosity=None):
         if not filename:
             filename = self.configname
         configname = filename
         self.configname = configname
-        debug(configname = filename)
+        #debug(configname = filename)
         self.configname = configname
-        debug(configset_configname = self.configname)
+        #debug(configset_configname = self.configname)
+        self.path = None
+        if self.path:
+            if configname:
+                self.configname = os.path.join(os.path.abspath(self.path), os.path.basename(self.configname))
         
         if os.path.isfile(os.path.join(os.getcwd(), filename)):
-            debug(checking_001 = "os.path.isfile(os.path.join(os.getcwd(), filename))")
+            #debug(checking_001 = "os.path.isfile(os.path.join(os.getcwd(), filename))")
             self.configname =os.path.join(os.getcwd(), filename)
-            debug(configname = os.path.join(os.getcwd(), filename))
+            #debug(configname = os.path.join(os.getcwd(), filename))
             return os.path.join(os.getcwd(), filename)
         elif os.path.isfile(filename):
-            debug(checking_002 = "os.path.isfile(filename)")
+            #debug(checking_002 = "os.path.isfile(filename)")
             self.configname =filename
-            debug(configname = os.path.abspath(filename))
+            #debug(configname = os.path.abspath(filename))
             return filename
         elif os.path.isfile(os.path.join(os.path.dirname(__file__), filename)):
-            debug(checking_003 = "os.path.isfile(os.path.join(os.path.dirname(__file__), filename))")
+            #debug(checking_003 = "os.path.isfile(os.path.join(os.path.dirname(__file__), filename))")
             self.configname =os.path.join(os.path.dirname(__file__), filename)
-            debug(configname = os.path.join(os.path.dirname(__file__), filename))
+            #debug(configname = os.path.join(os.path.dirname(__file__), filename))
             return os.path.join(os.path.dirname(__file__), filename)
         elif os.path.isfile(self.configname):
-            debug(checking_004 = "os.path.isfile(configname)")
-            debug(configname = os.path.abspath(configname))
+            #debug(checking_004 = "os.path.isfile(configname)")
+            #debug(configname = os.path.abspath(configname))
             return configname
-        elif os.path.isfile(os.path.join(os.path.dirname(__file__), self.configname)):
-            debug(checking_005 = "os.path.isfile(os.path.join(os.path.dirname(__file__), configname))")
-            debug(configname = os.path.join(os.path.dirname(__file__), self.configname))
-            return os.path.join(os.path.dirname(__file__), self.configname)
         else:
-            debug(checking_006 = "ELSE")
+            #debug(checking_006 = "ELSE")
             fcfg = self.configname
             f = open(fcfg, 'w')
             f.close()
             filecfg = fcfg
-            debug(CREATE = os.path.abspath(filecfg))
+            #debug(CREATE = os.path.abspath(filecfg))
             return filecfg
     
     def write_config(self, section, option, filename='', value=None, cfg = None, verbosity=None):
-        filename = self.get_config_file(filename, verbosity)
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname
         #cfg = ConfigParser.RawConfigParser(allow_no_value=True, dict_type=MultiOrderedDict)
-        #debug(filename = filename)
-        debug(value = value)
+        ##debug(filename = filename)
+        #debug(value = value)
         if cfg:
-            debug(cfg_not_none = True)
+            #debug(cfg_not_none = True)
             configset.cfg.read(filename)
         #if not value == None:
         #if os.path.isfile(os.path.join(THIS_PATH, filename)):
@@ -91,10 +111,10 @@ class configset(object):
             #filename = self.get_config_file()
             #configset.cfg.read(filename)
         try:
-            debug(cfg_set = True)
+            #debug(cfg_set = True)
             configset.cfg.set(section, option, value)
         except ConfigParser.NoSectionError:
-            debug(cfg_add = True)
+            #debug(cfg_add = True)
             configset.cfg.add_section(section)
             configset.cfg.set(section, option, value)
         cfg_data = open(filename,'wb')
@@ -104,7 +124,10 @@ class configset(object):
         return self.read_config(section, option, filename)
         
     def write_config2(self, section, option, filename='', value=None, verbosity=None):
-        filename = self.get_config_file(filename, verbosity)
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname
         #cfg = ConfigParser.RawConfigParser(allow_no_value=True, dict_type=MultiOrderedDict) 
         if not value == None:
             if os.path.isfile(os.path.join(THIS_PATH, filename)):
@@ -132,14 +155,18 @@ class configset(object):
         """
             option: section, option, filename='', value=None
         """
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname        
         filecfg = self.get_config_file(filename, verbosity)
         configset.cfg.read(filecfg)
         
-        # debug(section = section)
-        # debug(option = option)
-        # debug(value = value)
-        # debug(filecfg = str(filecfg))
-        # debug(filecfg = os.path.abspath(str(filecfg)))
+        # #debug(section = section)
+        # #debug(option = option)
+        # #debug(value = value)
+        # #debug(filecfg = str(filecfg))
+        # #debug(filecfg = os.path.abspath(str(filecfg)))
         
         try:
             data = configset.cfg.get(section, option)
@@ -157,7 +184,11 @@ class configset(object):
             format result: ['aaa','bbb','ccc','ddd']
             
         """
-        filename = self.get_config_file(filename, verbosity)
+        
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname
         cfg = ConfigParser.RawConfigParser(allow_no_value=True, dict_type=MultiOrderedDict) 
         cfg.read(filename)
         cfg = cfg.get(section, option)
@@ -169,7 +200,10 @@ class configset(object):
             format result: [[aaa.bbb.ccc.ddd, eee.fff.ggg.hhh], qqq.xxx.yyy.zzz]
             
         """
-        filename = self.get_config_file(filename, verbosity)
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname
         data = []
         cfg = ConfigParser.RawConfigParser(allow_no_value=True, dict_type=MultiOrderedDict) 
         cfg.read(filename)
@@ -191,16 +225,19 @@ class configset(object):
             format result: [aaa.bbb.ccc.ddd, eee.fff.ggg.hhh, qqq.xxx.yyy.zzz]
             
         """
-        filename = self.get_config_file(filename, verbosity)
-        debug(filename = filename)
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname
+        #debug(filename = filename)
         data = []
         cfg = ConfigParser.RawConfigParser(allow_no_value=True, dict_type=MultiOrderedDict)
         #print "CFG =", cfg
         cfg.read(filename)
-        debug(cfg0 = cfg)
+        #debug(cfg0 = cfg)
         try:
             cfg = cfg.get(section, option)
-            debug(cfg1 = cfg)
+            #debug(cfg1 = cfg)
             if not cfg == None:
                 for i in cfg:
                     if "," in i:
@@ -213,10 +250,10 @@ class configset(object):
             else:
                 return None
         except:
-            debug(ERROR = traceback.format_exc())
-            debug(except_has = True)
+            #debug(ERROR = traceback.format_exc())
+            #debug(except_has = True)
             data = self.write_config(section, option, filename, value, cfg)
-            debug(data = data)
+            #debug(data = data)
             return data
     
     def read_config5(self, section, option, filename='', verbosity=None): #format result: {aaa:bbb, ccc:ddd, eee:fff, ggg:hhh, qqq:xxx, yyy:zzz}
@@ -225,7 +262,10 @@ class configset(object):
             format result: {aaa:bbb, ccc:ddd, eee:fff, ggg:hhh, qqq:xxx, yyy:zzz}
             
         """
-        filename = self.get_config_file(filename, verbosity)
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname
         data = {}
         cfg = ConfigParser.RawConfigParser(allow_no_value=True, dict_type=MultiOrderedDict) 
         configset.cfg.read(filename)
@@ -249,7 +289,10 @@ class configset(object):
             format result: {aaa:bbb, ccc:ddd, eee:fff, ggg:hhh, qqq:xxx, yyy:zzz}
             
         """
-        filename = self.get_config_file(filename, verbosity)
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname
         data = {}
         cfg = ConfigParser.RawConfigParser(allow_no_value=True, dict_type=MultiOrderedDict) 
         configset.cfg.read(filename)
@@ -268,7 +311,10 @@ class configset(object):
         return data
         
     def get_config(self, section, option, filename='', value=None, verbosity=None):
-        filename = self.get_config_file(filename, verbosity)
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname
         try:
             data = self.read_config(section, option, filename, value)
         except ConfigParser.NoSectionError:
@@ -282,7 +328,10 @@ class configset(object):
         return data
     
     def get_config2(self, section, option, filename='', value=None, verbosity=None):
-        filename = self.get_config_file(filename, verbosity)
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname
         try:
             data = self.read_config2(section, option, filename)
         except ConfigParser.NoSectionError:
@@ -296,7 +345,10 @@ class configset(object):
         return data
     
     def get_config3(self, section, option, filename='', value=None, verbosity=None):
-        filename = self.get_config_file(filename, verbosity)
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname
         try:
             data = self.read_config3(section, option, filename)
         except ConfigParser.NoSectionError:
@@ -310,7 +362,10 @@ class configset(object):
         return data
     
     def get_config4(self, section, option, filename='', value='', verbosity=None):
-        filename = self.get_config_file(filename, verbosity)
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname
         try:
             data = self.read_config4(section, option, filename)
         except ConfigParser.NoSectionError:
@@ -327,7 +382,10 @@ class configset(object):
         return data
     
     def get_config5(self, section, option, filename='', value=None, verbosity=None):
-        filename = self.get_config_file(filename, verbosity)
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname
         try:
             data = self.read_config5(section, option, filename)
         except ConfigParser.NoSectionError:
@@ -341,7 +399,10 @@ class configset(object):
         return data
     
     def get_config6(self, section, option, filename='', value=None, verbosity=None):
-        filename = self.get_config_file(filename, verbosity)
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname
         try:
             data = self.read_config6(section, option, filename)
         except ConfigParser.NoSectionError:
@@ -355,10 +416,16 @@ class configset(object):
         return data
     
     def write_all_config(self, filename='', verbosity=None):
-        filename = self.get_config_file(filename, verbosity)
+        if not os.path.isfile(self.configname):
+            filename = self.get_config_file(filename, verbosity)
+        else:
+            filename = self.configname
     
     def read_all_config(self, filename='', section=[], verbosity=None):
-        filecfg = self.get_config_file(filename, verbosity)
+        if not os.path.isfile(self.configname):
+            filecfg = self.get_config_file(filename, verbosity)
+        else:
+            filecfg = self.configname
         configset.cfg.read(filecfg)    
         data = {}
         dbank = []
@@ -379,7 +446,10 @@ class configset(object):
         return dbank
         
     def read_all_section(self, filename='', section='server', verbosity=None):
-        filecfg = self.get_config_file(filename, verbosity)
+        if not os.path.isfile(self.configname):
+            filecfg = self.get_config_file(filename, verbosity)
+        else:
+            filecfg = self.configname
         configset.cfg.read(filecfg)    
         dbank = []
         dhost = []
@@ -440,21 +510,25 @@ class configset(object):
                             self.read_config6(args.section, args.option)
                     else:
                         print "INVALID TYPE !"
-                        debug("INVALID TYPE !")
+                        #debug("INVALID TYPE !")
                         print "\n"
                         parser.print_help()
                 else:
                     print "Please use '-r' for read or '-w' for write"
-                    debug("Please use '-r' for read or '-w' for write")
+                    #debug("Please use '-r' for read or '-w' for write")
                     print "\n"
                     parser.print_help()
             else:
                 print "NO FILE CONFIG !"
-                debug("NO FILE CONFIG !")
+                #debug("NO FILE CONFIG !")
                 print "\n"
                 parser.print_help()
     
+
 configset_class = configset()
+configset_class.configname = configname
+if PATH:
+    configset_class.path = PATH 
 get_config_file = configset_class.get_config_file
 write_config = configset_class.write_config
 write_config2 = configset_class.write_config2
