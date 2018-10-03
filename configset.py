@@ -98,34 +98,34 @@ class configset(object):
             return filecfg
     
     def write_config(self, section, option, filename='', value=None, cfg = None, verbosity=None):
+        #print ("SECTION:", section)
+        #print ("OPTION :", option)
         if not os.path.isfile(self.configname):
             filename = self.get_config_file(filename, verbosity)
         else:
             filename = self.configname
-        #cfg = ConfigParser.RawConfigParser(allow_no_value=True, dict_type=MultiOrderedDict)
-        ##debug(filename = filename)
-        #debug(value = value)
+        if not cfg:
+            cfg = configset.cfg
         if cfg:
-            #debug(cfg_not_none = True)
-            configset.cfg.read(filename)
-        #if not value == None:
-        #if os.path.isfile(os.path.join(THIS_PATH, filename)):
-            #configset.cfg.read(filename)
-        #else:
-            #filename = self.get_config_file()
-            #configset.cfg.read(filename)
+            cfg.read(filename)
+        else:
+            cfg = ConfigParser.RawConfigParser(allow_no_value=True)
+            cfg.optionxform = str
+            cfg.read(filename)
         try:
-            #debug(cfg_set = True)
-            configset.cfg.set(section, option, value)
+            cfg.set(section, option, value)
         except ConfigParser.NoSectionError:
-            #debug(cfg_add = True)
-            configset.cfg.add_section(section)
-            configset.cfg.set(section, option, value)
+            cfg.add_section(section)
+            cfg.set(section, option, value)
+        except ConfigParser.NoOptionError:
+            cfg.set(section, option, value)
+
         if os.path.isfile(filename):
             cfg_data = open(filename,'w+')
         else:
             cfg_data = open(filename,'wb')
-        configset.cfg.write(cfg_data) 
+
+        cfg.write(cfg_data) 
         cfg_data.close()  
         
         return self.read_config(section, option, filename)
@@ -168,13 +168,6 @@ class configset(object):
             filename = self.configname        
         filecfg = self.get_config_file(filename, verbosity)
         configset.cfg.read(filecfg)
-        
-        # #debug(section = section)
-        # #debug(option = option)
-        # #debug(value = value)
-        # #debug(filecfg = str(filecfg))
-        # #debug(filecfg = os.path.abspath(str(filecfg)))
-        
         try:
             data = configset.cfg.get(section, option)
         except:
