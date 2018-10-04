@@ -38,14 +38,16 @@ class configset(object):
     # configname ='conf.ini'
     # #debug(configname = configname)
     
-    def __init__(self):
+    def __init__(self, config_file = None):
         super(configset, self)
         global configname
         global PATH
         self.configname = configname
         if self.configname:
             configname = self.configname
-
+        if os.path.isfile(config_file):
+            configname = config_file
+            self.configname = config_file
         self.path = None
         if not self.path:
             self.path = os.path.dirname(inspect.stack()[0][1])
@@ -157,7 +159,7 @@ class configset(object):
             return ''
         else:
             return "No Value set !"
-        
+    
     def read_config(self, section, option, filename='', value=None, verbosity=None):
         """
             option: section, option, filename='', value=None
@@ -525,7 +527,7 @@ class configset(object):
                 parser.print_help()
     
 
-configset_class = configset()
+configset_class = configset(configname)
 configset_class.configname = configname
 if PATH:
     configset_class.path = PATH 
