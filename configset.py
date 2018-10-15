@@ -187,7 +187,8 @@ class configset(object):
             if os.getenv('DEBUG') or os.getenv('DEBUG_SERVER'):
                 traceback.format_exc()
             else:
-                traceback.format_exc(print_msg= False)
+                #error = traceback.format_exc(print_msg= False)
+                pass
             #try:
             #if value:
             self.write_config(section, option, filename, value)
