@@ -180,17 +180,16 @@ class configset(object):
             filename = self.get_config_file(filename, verbosity)
         else:
             filename = self.configname
+        #print ("FILENAME =", filename)
         self.cfg.read(filename)
+        #print ("SECTION =", section)
+        #print ("OPTION  =", option)        
         try:
-            data = configset.cfg.get(section, option)
+            data = self.cfg.get(section, option)
+            #print ("DATA    =", data)
         except:
             if os.getenv('DEBUG') or os.getenv('DEBUG_SERVER'):
                 traceback.format_exc()
-            else:
-                #error = traceback.format_exc(print_msg= False)
-                pass
-            #try:
-            #if value:
             self.write_config(section, option, filename, value)
             data = configset.cfg.get(section, option)
         return data
