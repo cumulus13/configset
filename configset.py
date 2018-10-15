@@ -10,7 +10,7 @@ import traceback
 import re
 from collections import OrderedDict
 import inspect
-# from debug import debug 
+#from debug import debug 
 # from make_colors import make_colors
 
 __sdk__ = '2.7'
@@ -38,16 +38,16 @@ class configset(object):
     # configname ='conf.ini'
     # #debug(configname = configname)
     
-    def __init__(self, config_file = None):
+    def __init__(self):
         super(configset, self)
         global configname
         global PATH
+        self.cfg = ConfigParser.RawConfigParser(allow_no_value=True)
+        self.cfg.optionxform = str        
         self.configname = configname
         if self.configname:
             configname = self.configname
-        if os.path.isfile(config_file):
-            configname = config_file
-            self.configname = config_file
+
         self.path = None
         if not self.path:
             self.path = os.path.dirname(inspect.stack()[0][1])
@@ -68,29 +68,41 @@ class configset(object):
         #debug(configset_configname = self.configname)
         self.path = None
         if self.path:
+            if os.getenv('DEBUG'):
+                print ("001")
             if configname:
                 self.configname = os.path.join(os.path.abspath(self.path), os.path.basename(self.configname))
         
         if os.path.isfile(os.path.join(os.getcwd(), filename)):
+            if os.getenv('DEBUG'):
+                print ("002")
             #debug(checking_001 = "os.path.isfile(os.path.join(os.getcwd(), filename))")
-            self.configname =os.path.join(os.getcwd(), filename)
+            self.configname = os.path.join(os.getcwd(), filename)
             #debug(configname = os.path.join(os.getcwd(), filename))
             return os.path.join(os.getcwd(), filename)
         elif os.path.isfile(filename):
+            if os.getenv('DEBUG'):
+                print ("003")
             #debug(checking_002 = "os.path.isfile(filename)")
             self.configname =filename
             #debug(configname = os.path.abspath(filename))
             return filename
         elif os.path.isfile(os.path.join(os.path.dirname(__file__), filename)):
+            if os.getenv('DEBUG'):
+                print ("004")
             #debug(checking_003 = "os.path.isfile(os.path.join(os.path.dirname(__file__), filename))")
             self.configname =os.path.join(os.path.dirname(__file__), filename)
             #debug(configname = os.path.join(os.path.dirname(__file__), filename))
             return os.path.join(os.path.dirname(__file__), filename)
         elif os.path.isfile(self.configname):
+            if os.getenv('DEBUG'):
+                print ("005")
             #debug(checking_004 = "os.path.isfile(configname)")
             #debug(configname = os.path.abspath(configname))
             return configname
         else:
+            if os.getenv('DEBUG'):
+                print ("006")
             #debug(checking_006 = "ELSE")
             fcfg = self.configname
             f = open(fcfg, 'w')
@@ -167,16 +179,18 @@ class configset(object):
         if not os.path.isfile(self.configname):
             filename = self.get_config_file(filename, verbosity)
         else:
-            filename = self.configname        
-        filecfg = self.get_config_file(filename, verbosity)
-        configset.cfg.read(filecfg)
+            filename = self.configname
+        self.cfg.read(filename)
         try:
             data = configset.cfg.get(section, option)
         except:
-            try:
-                self.write_config(section, option, filename, value)
-            except:
+            if os.getenv('DEBUG') or os.getenv('DEBUG_SERVER'):
                 traceback.format_exc()
+            else:
+                traceback.format_exc(print_msg= False)
+            #try:
+            #if value:
+            self.write_config(section, option, filename, value)
             data = configset.cfg.get(section, option)
         return data
         
@@ -527,7 +541,7 @@ class configset(object):
                 parser.print_help()
     
 
-configset_class = configset(configname)
+configset_class = configset()
 configset_class.configname = configname
 if PATH:
     configset_class.path = PATH 
