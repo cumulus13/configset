@@ -122,32 +122,25 @@ class configset(ConfigParser.RawConfigParser):
         return self.read_config(section, option, filename)
 
     def write_config2(self, section, option, filename='', value=None):
-        if not os.path.isfile(self.configname):
-            filename = self.get_config_file(filename, verbosity)
-        else:
-            filename = self.configname
-        #cfg = ConfigParser.RawConfigParser(allow_no_value=True, dict_type=MultiOrderedDict) 
+        if filename:
+            if os.path.isfile(filename):
+                self.read(filename)
+        
         if not value == None:
-            if os.path.isfile(os.path.join(THIS_PATH, filename)):
-                configset.cfg.read(filename)
-            else:
-                filename = self.get_config_file()
-                configset.cfg.read(filename)
+            
             try:
-                configset.cfg.get(section, option)
-                configset.cfg.set(section, option, value)
+                self.get(section, option)
+                self.set(section, option, value)
             except ConfigParser.NoSectionError:
-                #configset.cfg.add_section(section)
-                #configset.cfg.set(section, option, value)
                 return "\tNo Section Name: '%s'" %(section)
             except ConfigParser.NoOptionError:
                 return "\tNo Option Name: '%s'" %(option)
             cfg_data = open(filename,'wb')
-            configset.cfg.write(cfg_data)   
+            self.write(cfg_data)   
             cfg_data.close()
-            return ''
+            return self.read_config(section, option)
         else:
-            return "No Value set !"
+            return None
 
     def read_config(self, section, option, filename='', value=None):
         """
@@ -264,14 +257,13 @@ class configset(ConfigParser.RawConfigParser):
             format result: {aaa:bbb, ccc:ddd, eee:fff, ggg:hhh, qqq:xxx, yyy:zzz}
 
         """
-        if not os.path.isfile(self.configname):
-            filename = self.get_config_file(filename, verbosity)
-        else:
-            filename = self.configname
+        self.dict_type = MultiOrderedDict
+        if filename:
+            if os.path.isfile(filename):
+                self.read(filename)
         data = {}
-        cfg = ConfigParser.RawConfigParser(allow_no_value=True, dict_type=MultiOrderedDict) 
-        configset.cfg.read(filename)
-        cfg = configset.cfg.get(section, option)
+
+        cfg = self.get(section, option)
         for i in cfg:
             if "," in i:
                 d1 = str(i).split(",")
@@ -280,8 +272,10 @@ class configset(ConfigParser.RawConfigParser):
                     data.update({str(d2[0]).strip():int(str(d2[1]).strip())})
             else:
                 for x in i:
-                    e1 = str(i).split(":")
+                    e1 = str(x).split(":")
                     data.update({str(e1[0]).strip():int(str(e1[1]).strip())})
+        self.dict_type = None
+        self.read(self.configname)                    
         return data
 
     def read_config6(self, section, option, filename='', verbosity=None): #format result: {aaa:[bbb, ccc], ddd:[eee, fff], ggg:[hhh, qqq], xxx:[yyy:zzz]}
@@ -291,14 +285,13 @@ class configset(ConfigParser.RawConfigParser):
             format result: {aaa:bbb, ccc:ddd, eee:fff, ggg:hhh, qqq:xxx, yyy:zzz}
 
         """
-        if not os.path.isfile(self.configname):
-            filename = self.get_config_file(filename, verbosity)
-        else:
-            filename = self.configname
+        self.dict_type = MultiOrderedDict
+        if filename:
+            if os.path.isfile(filename):
+                self.read(filename)
         data = {}
-        cfg = ConfigParser.RawConfigParser(allow_no_value=True, dict_type=MultiOrderedDict) 
-        configset.cfg.read(filename)
-        cfg = configset.cfg.get(section, option)
+        
+        cfg = self.get(section, option)
         for i in cfg:
             if ":" in i:
                 d1 = str(i).split(":")
@@ -309,21 +302,19 @@ class configset(ConfigParser.RawConfigParser):
                     d5 = str(d3[-2]).strip()
                     data.update({d2:[d4, d5]})
             else:
-                pass    
+                pass
+        self.dict_type = None
+        self.read(self.configname)                            
         return data
 
     def get_config(self, section, option, filename=None, value=None):
         if filename:
-            if not os.path.isfile(self.configname):
+            if os.path.isfile(filename):
                 self.read(filename)
-            else:
-                self.read(self.configname)
-        else:
-            self.read(self.configname)
-        print("self_configname =", os.path.abspath(self.configname))
+        
         try:
             data = self.read_config(section, option, filename, value)
-            print("DATAX =", data)
+            #print("DATAX =", data)
         except ConfigParser.NoSectionError:
             print (traceback.format_exc())
             self.write_config(section, option, filename, value)
@@ -335,7 +326,7 @@ class configset(ConfigParser.RawConfigParser):
         except:
             print (traceback.format_exc())
         self.read(self.configname)
-        print("DATAZ =", data)
+        #print("DATAZ =", data)
         return data
 
     def get_config2(self, section, option, filename='', value=None, verbosity=None):
@@ -432,40 +423,38 @@ class configset(ConfigParser.RawConfigParser):
         else:
             filename = self.configname
 
-    def read_all_config(self, filename='', section=[], verbosity=None):
-        if not os.path.isfile(self.configname):
-            filecfg = self.get_config_file(filename, verbosity)
-        else:
-            filecfg = self.configname
-        configset.cfg.read(filecfg)    
+    def read_all_config(self, filename='', section=[]):
+        if filename:
+            if os.path.isfile(filename):
+                self.read(filename)
+        
         data = {}
         dbank = []
         if len(section) != 0:
-            for x in configset.cfg.options(section):
-                d = configset.cfg.get(section, x)
+            for x in self.options(section):
+                d = self.get(section, x)
                 data.update({x:d})
             dbank.append([section,data])        
         else:    
-            #print "configset.cfg.sections() =", configset.cfg.sections()
-            for i in configset.cfg.sections():
+            #print "self.sections() =", self.sections()
+            for i in self.sections():
                 section.append(i)
-                for x in configset.cfg.options(i):
-                    d = configset.cfg.get(i, x)
+                for x in self.options(i):
+                    d = self.get(i, x)
                     data.update({x:d})
                 dbank.append([i,data])
-        #print "dbank =",  dbank
+        
         return dbank
 
-    def read_all_section(self, filename='', section='server', verbosity=None):
-        if not os.path.isfile(self.configname):
-            filecfg = self.get_config_file(filename, verbosity)
-        else:
-            filecfg = self.configname
-        configset.cfg.read(filecfg)    
+    def read_all_section(self, filename='', section='server'):
+        if filename:
+            if os.path.isfile(filename):
+                self.read(filename)
+        
         dbank = []
         dhost = []
-        for x in configset.cfg.options(section):
-            d = configset.cfg.get(section, x)
+        for x in self.options(section):
+            d = self.get(section, x)
             #data.update({x:d})
             dbank.append(d)
             if d:
@@ -474,16 +463,9 @@ class configset(ConfigParser.RawConfigParser):
                     host = str(data[0]).strip()
                     port = int(str(data[1]).strip())
                     dhost.append([host,  port])
-        #print "dbank =",  dbank
-        #print "dhost =",  dhost
+        
         return [dhost,  dbank]
 
-    def test(verbosity=None):
-        filename = self.get_config_file(verbosity)
-        configset.cfg.read(filename)
-        data = configset.cfg.sections()
-        print (configset.cfg.get('router','host'))
-        print (data)
     def usage(self):
         parser = argparse.ArgumentParser(formatter_class= argparse.RawTextHelpFormatter)
         parser.add_argument('CONFIG_FILE', action = 'store', help = 'Config file name path')
@@ -558,7 +540,6 @@ get_config6 = configset_class.get_config6
 write_all_config = configset_class.write_all_config
 read_all_config = configset_class.read_all_config
 read_all_section = configset_class.read_all_section
-test = configset_class.test
 usage = configset_class.usage
 
 if __name__ == '__main__':
