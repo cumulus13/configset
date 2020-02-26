@@ -20,7 +20,7 @@ __platform__ = 'all'
 __url__ = 'licface@yahoo.com'
 __build__ = '2.7'
 
-CONFIGNAME ='conf.ini'
+configname ='conf.ini'
 PATH = ''
 if PATH:
     configname = os.path.join(PATH, os.path.basename(configname))
@@ -34,20 +34,22 @@ class MultiOrderedDict(OrderedDict):
 
 
 class configset(ConfigParser.RawConfigParser):
-    def __init__(self, configname = None):
+    def __init__(self, configfile = None):
         ConfigParser.RawConfigParser.__init__(self)
         self.allow_no_value = True
         self.optionxform = str
+        if not configfile:
+            configfile = configname
         #self.cfg = ConfigParser.RawConfigParser(allow_no_value=True)
         self.path = None
-        self.configname = configname
+        self.configname = configfile
         print("configname 0 =", self.configname)
         if PATH:
             self.path = PATH
         if not self.path:
             self.path = os.path.dirname(inspect.stack()[0][1])
         if not self.configname:
-            self.configname = os.path.join(self.path, os.path.basename(CONFIGNAME))
+            self.configname = os.path.join(self.path, os.path.basename(configname))
         self.read(self.configname)
         print("configname 1 =", self.configname)
 
