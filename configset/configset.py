@@ -35,7 +35,6 @@ class MultiOrderedDict(OrderedDict):
 
 class configset(ConfigParser.RawConfigParser):
     def __init__(self, configname = None):
-        super(configset, self)
         ConfigParser.RawConfigParser.__init__(self)
         self.allow_no_value = True
         self.optionxform = str

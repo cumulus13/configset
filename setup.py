@@ -26,7 +26,7 @@ setup(
     project_urls={
         "Documentation": "https://bitbucket.org/licface/configset",
         "Code": "https://bitbucket.org/licface/configset",
-    },
+        },
     license="BSD",
     author="Hadi Cahyadi LD",
     author_email="cumulus13@gmail.com",
@@ -34,12 +34,13 @@ setup(
     maintainer_email="cumulus13@gmail.com",
     description="simple write config/setting, wrap of configparser",
     long_description=readme,
+    long_description_content_type  = "text/markdown", 
     packages=["configset"],
     install_requires=[
         'argparse',
         'configparser',
-        
-    ],
+
+        ],
     data_files=['__version__.py', 'README.rst', 'LICENSE.rst'],
     include_package_data=True,
     python_requires=">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*",
@@ -56,5 +57,5 @@ setup(
         "Programming Language :: Python :: 3.5",
         "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
-    ],
+        ],
 )

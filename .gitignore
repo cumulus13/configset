@@ -4,5 +4,6 @@
 *.7z
 *.mp3
 *.wav
+build/
 dist/
 *egg-info/
