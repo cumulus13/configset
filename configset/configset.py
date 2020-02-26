@@ -14,6 +14,7 @@ from collections import OrderedDict
 import inspect
 # from debug import debug 
 # from make_colors import make_colors
+from pydebugger.debug import debug
 
 __sdk__ = '2.7'
 __platform__ = 'all'
@@ -152,7 +153,8 @@ class configset(ConfigParser.RawConfigParser):
                 self.read(filename)
         try:
             data = self.get(section, option)
-            print("data C =", data)
+            #print("data C =", data)
+            debug(data_c = data)
         except:
             try:
                 self.write_config(section, option, filename, value)
@@ -175,7 +177,8 @@ class configset(ConfigParser.RawConfigParser):
         
         try:
             data = self.get(section, option)
-            print("data C =", data)
+            #print("data C =", data)
+            debug(data_c = data)
         except:
             try:
                 self.write_config(section, option, filename, value)
