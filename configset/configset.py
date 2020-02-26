@@ -16,7 +16,7 @@ import inspect
 # from make_colors import make_colors
 from pydebugger.debug import debug
 
-__sdk__ = '2.7'
+__sdk__ = '2.7+'
 __platform__ = 'all'
 __url__ = 'licface@yahoo.com'
 __build__ = '2.7'
