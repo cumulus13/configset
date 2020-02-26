@@ -43,7 +43,7 @@ class configset(ConfigParser.RawConfigParser):
         #self.cfg = ConfigParser.RawConfigParser(allow_no_value=True)
         self.path = None
         self.configname = configfile
-        print("configname 0 =", self.configname)
+        debug(configname_0 = self.configname)
         if PATH:
             self.path = PATH
         if not self.path:
@@ -51,7 +51,7 @@ class configset(ConfigParser.RawConfigParser):
         if not self.configname:
             self.configname = os.path.join(self.path, os.path.basename(configname))
         self.read(self.configname)
-        print("configname 1 =", self.configname)
+        debug(configname_1 = self.configname)
 
     def get_config_file(self, filename='', verbosity=None):
         if not filename:
@@ -520,7 +520,7 @@ class configset(ConfigParser.RawConfigParser):
 
 
 configset_class = configset()
-configset_class.configname = CONFIGNAME
+configset_class.configname = configname
 if PATH:
     configset_class.path = PATH 
 get_config_file = configset_class.get_config_file
