@@ -39,8 +39,6 @@ class configset(ConfigParser.RawConfigParser):
         ConfigParser.RawConfigParser.__init__(self)
         self.allow_no_value = True
         self.optionxform = str
-        global configname
-        global PATH
         if not configfile:
             configfile = configname
         #self.cfg = ConfigParser.RawConfigParser(allow_no_value=True)
@@ -53,52 +51,47 @@ class configset(ConfigParser.RawConfigParser):
             self.path = os.path.dirname(inspect.stack()[0][1])
         if not self.configname:
             self.configname = os.path.join(self.path, os.path.basename(configname))
-        #if not os.path.isfile(self.configname):
-            #self.configname = self.get_config_file(self.configname)
-        if not os.path.isfile(self.configname):
-            f = open(self.configname, 'w')
-            f.close()
         self.read(self.configname)
         debug(configname_1 = self.configname)
 
-    #def get_config_file(self, filename='', verbosity=None):
-        #if not filename:
-            #filename = self.configname
-        #configname = filename
-        #self.configname = configname
-        ##debug(configset_configname = self.configname)
-        #self.path = None
-        #if self.path:
-            #if configname:
-                #self.configname = os.path.join(os.path.abspath(self.path), os.path.basename(self.configname))
+    def get_config_file(self, filename='', verbosity=None):
+        if not filename:
+            filename = self.configname
+        configname = filename
+        self.configname = configname
+        #debug(configset_configname = self.configname)
+        self.path = None
+        if self.path:
+            if configname:
+                self.configname = os.path.join(os.path.abspath(self.path), os.path.basename(self.configname))
 
-        #if os.path.isfile(os.path.join(os.getcwd(), filename)):
-            ##debug(checking_001 = "os.path.isfile(os.path.join(os.getcwd(), filename))")
-            #self.configname =os.path.join(os.getcwd(), filename)
-            ##debug(configname = os.path.join(os.getcwd(), filename))
-            #return os.path.join(os.getcwd(), filename)
-        #elif os.path.isfile(filename):
-            ##debug(checking_002 = "os.path.isfile(filename)")
-            #self.configname =filename
-            ##debug(configname = os.path.abspath(filename))
-            #return filename
-        #elif os.path.isfile(os.path.join(os.path.dirname(__file__), filename)):
-            ##debug(checking_003 = "os.path.isfile(os.path.join(os.path.dirname(__file__), filename))")
-            #self.configname =os.path.join(os.path.dirname(__file__), filename)
-            ##debug(configname = os.path.join(os.path.dirname(__file__), filename))
-            #return os.path.join(os.path.dirname(__file__), filename)
-        #elif os.path.isfile(self.configname):
-            ##debug(checking_004 = "os.path.isfile(configname)")
-            ##debug(configname = os.path.abspath(configname))
-            #return configname
-        #else:
-            ##debug(checking_006 = "ELSE")
-            #fcfg = self.configname
-            #f = open(fcfg, 'w')
-            #f.close()
-            #filecfg = fcfg
-            ##debug(CREATE = os.path.abspath(filecfg))
-            #return filecfg
+        if os.path.isfile(os.path.join(os.getcwd(), filename)):
+            #debug(checking_001 = "os.path.isfile(os.path.join(os.getcwd(), filename))")
+            self.configname =os.path.join(os.getcwd(), filename)
+            #debug(configname = os.path.join(os.getcwd(), filename))
+            return os.path.join(os.getcwd(), filename)
+        elif os.path.isfile(filename):
+            #debug(checking_002 = "os.path.isfile(filename)")
+            self.configname =filename
+            #debug(configname = os.path.abspath(filename))
+            return filename
+        elif os.path.isfile(os.path.join(os.path.dirname(__file__), filename)):
+            #debug(checking_003 = "os.path.isfile(os.path.join(os.path.dirname(__file__), filename))")
+            self.configname =os.path.join(os.path.dirname(__file__), filename)
+            #debug(configname = os.path.join(os.path.dirname(__file__), filename))
+            return os.path.join(os.path.dirname(__file__), filename)
+        elif os.path.isfile(self.configname):
+            #debug(checking_004 = "os.path.isfile(configname)")
+            #debug(configname = os.path.abspath(configname))
+            return configname
+        else:
+            #debug(checking_006 = "ELSE")
+            fcfg = self.configname
+            f = open(fcfg, 'w')
+            f.close()
+            filecfg = fcfg
+            #debug(CREATE = os.path.abspath(filecfg))
+            return filecfg
 
     def write_config(self, section, option, filename='', value=None):
         if not value:
@@ -533,7 +526,7 @@ configset_class = configset()
 configset_class.configname = configname
 if PATH:
     configset_class.path = PATH 
-#get_config_file = configset_class.get_config_file
+get_config_file = configset_class.get_config_file
 write_config = configset_class.write_config
 write_config2 = configset_class.write_config2
 read_config = configset_class.read_config
