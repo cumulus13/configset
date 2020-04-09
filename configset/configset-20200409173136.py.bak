@@ -21,7 +21,7 @@ __platform__ = 'all'
 __url__ = 'licface@yahoo.com'
 __build__ = '2.7'
 
-#configname ='conf.ini'
+configname ='conf.ini'
 PATH = ''
 if PATH:
     configname = os.path.join(PATH, os.path.basename(configname))
@@ -39,28 +39,27 @@ class configset(ConfigParser.RawConfigParser):
         ConfigParser.RawConfigParser.__init__(self)
         self.allow_no_value = True
         self.optionxform = str
-        #global configname
-        #global PATH
-        #if not configfile:
-        #    configfile = configname
+        global configname
+        global PATH
+        if not configfile:
+            configfile = configname
         #self.cfg = ConfigParser.RawConfigParser(allow_no_value=True)
         self.path = None
         self.configname = configfile
         debug(configname_0 = self.configname)
-        #if PATH:
-        #    self.path = PATH
+        if PATH:
+            self.path = PATH
         if not self.path:
             self.path = os.path.dirname(inspect.stack()[0][1])
-        #if not self.configname:
-        #    self.configname = os.path.join(self.path, os.path.basename(configname))
+        if not self.configname:
+            self.configname = os.path.join(self.path, os.path.basename(configname))
         #if not os.path.isfile(self.configname):
             #self.configname = self.get_config_file(self.configname)
-        if self.configname:
-            if not os.path.isfile(self.configname):
-                f = open(self.configname, 'w')
-                f.close()
-            self.read(self.configname)
-            debug(configname_1 = self.configname)
+        if not os.path.isfile(self.configname):
+            f = open(self.configname, 'w')
+            f.close()
+        self.read(self.configname)
+        debug(configname_1 = self.configname)
 
     #def get_config_file(self, filename='', verbosity=None):
         #if not filename:
@@ -101,7 +100,7 @@ class configset(ConfigParser.RawConfigParser):
             ##debug(CREATE = os.path.abspath(filecfg))
             #return filecfg
 
-    def write_config(self, section, option, value=None, filename=''):
+    def write_config(self, section, option, filename='', value=None):
         if not value:
             value = ''
         if filename:
@@ -319,10 +318,7 @@ class configset(ConfigParser.RawConfigParser):
         self.read(self.configname)                            
         return data
 
-    def get_config(self, section, option, value=None, filename=None):
-        value = str(value)
-        if value == 'None':
-            value = ''
+    def get_config(self, section, option, filename=None, value=None):
         if filename:
             if os.path.isfile(filename):
                 self.read(filename)
@@ -341,14 +337,8 @@ class configset(ConfigParser.RawConfigParser):
         except:
             print (traceback.format_exc())
         self.read(self.configname)
-        if data == 'False' or data == 'false':
-            return False
-        elif data == 'True' or data == 'true':
-            return True
-        elif str(data).isdigit():
-            return int(data)
-        else:
-            return data
+        #print("DATAZ =", data)
+        return data
 
     def get_config2(self, section, option, filename='', value=None, verbosity=None):
         if not os.path.isfile(self.configname):
@@ -540,9 +530,9 @@ class configset(ConfigParser.RawConfigParser):
 
 
 configset_class = configset()
-#configset_class.configname = configname
-#if PATH:
-#    configset_class.path = PATH 
+configset_class.configname = configname
+if PATH:
+    configset_class.path = PATH 
 #get_config_file = configset_class.get_config_file
 write_config = configset_class.write_config
 write_config2 = configset_class.write_config2
