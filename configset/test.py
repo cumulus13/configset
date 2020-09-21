@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 from configset import configset
 configname = os.path.join(os.path.dirname(__file__), 'test.ini')
