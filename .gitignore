@@ -2,7 +2,9 @@
 *.zip
 *.bak
 *.rar
+*.log
 *.7z
+*.bak
 *.mp3
 *.wav
 build/

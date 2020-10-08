@@ -5,7 +5,7 @@ simple write config/setting, wrap of configparser
 
 
 Installing
-----------
+-----------
 
 Install and update using `pip`_:
 
@@ -31,22 +31,22 @@ What does it look like? Here is an example of a simple configset program:
 
         def __init__(self, **kwargs):
             ...
-            self.CONFIG = configset.configset()
-            self.CONFIG.configname = os.path.join(os.path.dirname(__file__), 'pcloud.ini')
+            self.CONFIG.configname = os.path.join(os.path.dirname(__file__), 'config.ini')
+            self.CONFIG = configset.configset(self.CONFIG.configname)
             ...
 
-            self.username = self.CONFIG.read_config('AUTH', 'username', value="admin")
-            self.password = self.CONFIG.read_config('AUTH', 'password', value="12345678")
+            self.username = self.CONFIG.read_config('AUTH', 'username', "admin")
+            self.password = self.CONFIG.read_config('AUTH', 'password', "12345678")
             ...
 
 Support
-------
+---------
 
-*   Python 2.7 +, Python 3.x
+*   Python 2.7 +
 *   Windows, Linux
 
 Links
------
+------
 
 *   License: `BSD <https://bitbucket.org/licface/configset/src/default/LICENSE.rst>`_
 *   Code: https://bitbucket.org/licface/configset

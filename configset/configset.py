@@ -39,10 +39,7 @@ class configset(ConfigParser.RawConfigParser):
         #self.cfg = ConfigParser.RawConfigParser(allow_no_value=True)
         self.path = None
         self.configname = configfile
-        self.read(self.configname)
-        debug(configname_0 = self.configname)
-        #if PATH:
-        #    self.path = PATH
+
         if not self.path:
             self.path = os.path.dirname(inspect.stack()[0][1])
 
@@ -163,7 +160,7 @@ class configset(ConfigParser.RawConfigParser):
             #debug(data_c = data)
         except:
             try:
-                self.write_config(section, option, filename, value)
+                self.write_config(section, option, value, filename)
             except:
                 print ("error:", traceback.format_exc())
             data = self.get(section, option)
@@ -320,8 +317,6 @@ class configset(ConfigParser.RawConfigParser):
     def get_config(self, section, option, value=None, filename=None):
         if value and not isinstance(value, str):
             value = str(value)
-        else:
-            value = ''
 
         if value == 'None':
             value = ''
@@ -329,14 +324,18 @@ class configset(ConfigParser.RawConfigParser):
 
         try:
             data = self.read_config(section, option, filename, value)
-            #print("DATAX =", data)
+            # print("value =", value)
+            if value:
+                self.write_config(section, option, value, filename)
+                data = self.read_config(section, option, filename, value)
+            # print("DATAX {0} - {1} =".format(section, option), data)
         except ConfigParser.NoSectionError:
             print (traceback.format_exc())
-            self.write_config(section, option, filename, value)
+            self.write_config(section, option, value, filename)
             data = self.read_config(section, option, filename, value)
         except ConfigParser.NoOptionError:
             print (traceback.format_exc())
-            self.write_config(section, option, filename, value)
+            self.write_config(section, option, value, filename)
             data = self.read_config(section, option, filename, value)
         except:
             print (traceback.format_exc())

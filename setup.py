@@ -2,7 +2,6 @@ import io
 import re
 from setuptools import setup
 
-
 import os
 import shutil
 try:
@@ -34,16 +33,15 @@ setup(
     maintainer_email="cumulus13@gmail.com",
     description="simple write config/setting, wrap of configparser",
     long_description=readme,
-    long_description_content_type  = "text/markdown", 
+    long_description_content_type="text/markdown", 
     packages=["configset"],
     install_requires=[
         'argparse',
         'configparser',
-
         ],
     data_files=['__version__.py', 'README.rst', 'LICENSE.rst'],
     include_package_data=True,
-    python_requires=">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*",
+    python_requires=">=2.7",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
