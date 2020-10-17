@@ -109,8 +109,15 @@ class configset(ConfigParser.RawConfigParser):
             self.set(section, option, value)
 
         cfg_data = open(self.configname,'wb')
-
-        self.write(cfg_data) 
+        # print("type(cfg_data) =", type(cfg_data))
+        # print("dir(cfg_data) =", dir(cfg_data))
+        try:
+            self.write(cfg_data) 
+        except:
+            # print(traceback.format_exc())
+            import io
+            io_data = io.BytesIO(cfg_data.read().encode('utf-8'))
+            self.write(io_data) 
         cfg_data.close()  
 
         return self.read_config(section, option)
@@ -151,7 +158,8 @@ class configset(ConfigParser.RawConfigParser):
             try:
                 self.write_config(section, option, value)
             except:
-                print ("error:", traceback.format_exc())
+                if os.getenv('DEBUG'):
+                    print ("error:", traceback.format_exc())
             # data = self.get(section, option)
         # self.read(self.configname)
         return self.get(section, option)
@@ -314,15 +322,18 @@ class configset(ConfigParser.RawConfigParser):
         try:
             data = self.read_config(section, option, value)
         except ConfigParser.NoSectionError:
-            print (traceback.format_exc())
+            if os.getenv('DEBUG'):
+                print (traceback.format_exc())
             self.write_config(section, option, value)
             data = self.read_config(section, option, value)
         except ConfigParser.NoOptionError:
-            print (traceback.format_exc())
+            if os.getenv('DEBUG'):
+                print (traceback.format_exc())
             self.write_config(section, option, value)
             data = self.read_config(section, option, value)
         except:
-            print (traceback.format_exc())
+            if os.getenv('DEBUG'):
+                print (traceback.format_exc())
         #self.read(self.configname)
         if data == 'False' or data == 'false':
             return False
