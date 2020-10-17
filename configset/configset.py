@@ -96,18 +96,10 @@ class configset(ConfigParser.RawConfigParser):
             ###debug(CREATE = os.path.abspath(filecfg))
             #return filecfg
 
-    def write_config(self, section, option, value=None, filename=''):
+    def write_config(self, section, option, value=None):
         if not value:
             value = ''
-        if filename:
-            if not os.path.isfile(self.configname):
-                self.read(filename)
-            else:
-                self.read(self.configname)
-        else:
-            filename = self.configname
-            #self.read(self.configname)
-
+        
         try:
             self.set(section, option, value)
         except ConfigParser.NoSectionError:
@@ -116,15 +108,12 @@ class configset(ConfigParser.RawConfigParser):
         except ConfigParser.NoOptionError:
             self.set(section, option, value)
 
-        if os.path.isfile(filename):
-            cfg_data = open(filename,'w+')
-        else:
-            cfg_data = open(filename,'wb')
+        cfg_data = open(self.configname,'wb')
 
         self.write(cfg_data) 
         cfg_data.close()  
 
-        return self.read_config(section, option, filename)
+        return self.read_config(section, option)
 
     def write_config2(self, section, option, filename='', value=None):
         if filename:
@@ -147,25 +136,25 @@ class configset(ConfigParser.RawConfigParser):
         else:
             return None
 
-    def read_config(self, section, option, filename='', value=None):
+    def read_config(self, section, option, value = None):
         """
-            option: section, option, filename='', value=None
+            option: section, option, value=None
         """
-        if filename:
-            if os.path.isfile(filename):
-                self.read(filename)
+        #print("read_config -> value =", value)
+        
         try:
             data = self.get(section, option)
-            #print("data C =", data)
-            #debug(data_c = data)
+            
+            if value and not data:
+                self.write_config(section, option, value)
         except:
             try:
-                self.write_config(section, option, value, filename)
+                self.write_config(section, option, value)
             except:
                 print ("error:", traceback.format_exc())
-            data = self.get(section, option)
-        self.read(self.configname)
-        return data
+            # data = self.get(section, option)
+        # self.read(self.configname)
+        return self.get(section, option)
 
     def read_config2(self, section, option, filename='', value=None): #format ['aaa','bbb','ccc','ddd']
         """
@@ -314,29 +303,24 @@ class configset(ConfigParser.RawConfigParser):
         self.read(self.configname)                            
         return data
 
-    def get_config(self, section, option, value=None, filename=None):
+    def get_config(self, section, option, value=None):
+        
         if value and not isinstance(value, str):
             value = str(value)
 
-        if value == 'None':
+        if not value or value == 'None':
             value = ''
-
-
+        
         try:
-            data = self.read_config(section, option, filename, value)
-            # print("value =", value)
-            if value:
-                self.write_config(section, option, value, filename)
-                data = self.read_config(section, option, filename, value)
-            # print("DATAX {0} - {1} =".format(section, option), data)
+            data = self.read_config(section, option, value)
         except ConfigParser.NoSectionError:
             print (traceback.format_exc())
-            self.write_config(section, option, value, filename)
-            data = self.read_config(section, option, filename, value)
+            self.write_config(section, option, value)
+            data = self.read_config(section, option, value)
         except ConfigParser.NoOptionError:
             print (traceback.format_exc())
-            self.write_config(section, option, value, filename)
-            data = self.read_config(section, option, filename, value)
+            self.write_config(section, option, value)
+            data = self.read_config(section, option, value)
         except:
             print (traceback.format_exc())
         #self.read(self.configname)
@@ -348,6 +332,40 @@ class configset(ConfigParser.RawConfigParser):
             return int(data)
         else:
             return data
+        
+    def get_config_as_list(self, section, option, value=None):
+        if value and not isinstance(value, str):
+            value = str(value)
+
+        if not value:
+            value = ''
+
+        try:
+            data = self.read_config(section, option, value)
+        except ConfigParser.NoSectionError:
+            print (traceback.format_exc())
+            self.write_config(section, option, value)
+            data = self.read_config(section, option, value)
+        except ConfigParser.NoOptionError:
+            print (traceback.format_exc())
+            self.write_config(section, option, value)
+            data = self.read_config(section, option, value)
+        except:
+            print (traceback.format_exc())
+        data = re.split("\n|,| ", data)
+        data = list(filter(None, data))
+        data_list = []
+        for i in data:
+            if i.strip() == 'False' or i.strip() == 'false':
+                data_list.append(False)
+            elif i.strip() == 'True' or i.strip() == 'true':
+                data_list.append(True)
+            elif str(i).strip().isdigit():
+                data_list.append(int(i.strip()))
+            else:
+                data_list.append(i.strip())
+        return data_list
+        
 
     def get_config2(self, section, option, filename='', value=None, verbosity=None):
         if not os.path.isfile(self.configname):
