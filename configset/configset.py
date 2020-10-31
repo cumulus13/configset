@@ -1,6 +1,7 @@
 from __future__ import print_function
 import sys
 import argparse
+import inspect
 
 if sys.version_info.major == 2:
     import ConfigParser
@@ -15,12 +16,8 @@ import inspect
 # from make_colors import make_colors
 from pydebugger.debug import debug
 
-__sdk__ = '2.7+'
 __platform__ = 'all'
-__url__ = 'licface@yahoo.com'
-__build__ = '2.7'
-
-#configname ='conf.ini'
+__contact__ = 'licface@yahoo.com'
 
 class MultiOrderedDict(OrderedDict):
     def __setitem__(self, key, value):
@@ -39,6 +36,18 @@ class configset(ConfigParser.RawConfigParser):
         #self.cfg = ConfigParser.RawConfigParser(allow_no_value=True)
         self.path = None
         self.configname = configfile
+        if not self.configname:
+            configpath = inspect.stack()[0][1]
+            debug(configpath = configpath)
+            if os.path.isfile(configpath):
+                configpath = os.path.dirname(configpath)
+            else:
+                configpath = os.getcwd()
+            debug(configpath = configpath)
+            configname = os.path.splitext(inspect.stack()[1][1])[0]
+            debug(configname = configname)
+            self.configname = os.path.join(configpath, configname) + ".ini"
+            print("CONFIGNAME:", self.configname)
 
         if not self.path:
             self.path = os.path.dirname(inspect.stack()[0][1])
@@ -96,8 +105,8 @@ class configset(ConfigParser.RawConfigParser):
             ###debug(CREATE = os.path.abspath(filecfg))
             #return filecfg
 
-    def write_config(self, section, option, value=None):
-        if not value:
+    def write_config(self, section, option, value=''):
+        if value == None:
             value = ''
         
         try:
@@ -107,17 +116,19 @@ class configset(ConfigParser.RawConfigParser):
             self.set(section, option, value)
         except ConfigParser.NoOptionError:
             self.set(section, option, value)
-
-        cfg_data = open(self.configname,'wb')
-        # print("type(cfg_data) =", type(cfg_data))
-        # print("dir(cfg_data) =", dir(cfg_data))
+        
+        if sys.version_info.major == '2':
+            cfg_data = open(self.configname,'wb')
+        else:
+            cfg_data = open(self.configname,'w')
+        
         try:
-            self.write(cfg_data) 
+            self.write(cfg_data)
         except:
-            # print(traceback.format_exc())
-            import io
-            io_data = io.BytesIO(cfg_data.read().encode('utf-8'))
-            self.write(io_data) 
+            print(traceback.format_exc())
+            #import io
+            #io_data = io.BytesIO(cfg_data.read().encode('utf-8'))
+            #self.write(io_data) 
         cfg_data.close()  
 
         return self.read_config(section, option)
@@ -158,10 +169,8 @@ class configset(ConfigParser.RawConfigParser):
             try:
                 self.write_config(section, option, value)
             except:
-                if os.getenv('DEBUG'):
-                    print ("error:", traceback.format_exc())
-            # data = self.get(section, option)
-        # self.read(self.configname)
+                print ("error:", traceback.format_exc())
+            
         return self.get(section, option)
 
     def read_config2(self, section, option, filename='', value=None): #format ['aaa','bbb','ccc','ddd']
@@ -312,7 +321,7 @@ class configset(ConfigParser.RawConfigParser):
         return data
 
     def get_config(self, section, option, value=None):
-        
+        data = None
         if value and not isinstance(value, str):
             value = str(value)
 
