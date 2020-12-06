@@ -36,35 +36,46 @@ class configset(ConfigParser.RawConfigParser):
         #self.cfg = ConfigParser.RawConfigParser(allow_no_value=True)
         self.path = None
         self.configname = configfile
-        if not self.configname:
+        
+        configpath = ''
+        try:
             configpath = inspect.stack()[0][1]
-            debug(configpath = configpath)
-            if os.path.isfile(configpath):
-                configpath = os.path.dirname(configpath)
-            else:
-                configpath = os.getcwd()
-            debug(configpath = configpath)
+        except:
+            pass
+        if os.path.isfile(configpath):
+            configpath = os.path.dirname(configpath)
+        else:
+            configpath = os.getcwd()
+        
+        if not self.configname:
             configname = os.path.splitext(inspect.stack()[1][1])[0]
-            debug(configname = configname)
-            self.configname = os.path.join(configpath, configname) + ".ini"
-            print("CONFIGNAME:", self.configname)
+            self.configname = configname + ".ini"
 
         if not self.path:
             self.path = os.path.dirname(inspect.stack()[0][1])
-
-        if self.configname:
-            if not os.path.isfile(self.configname):
-                f = open(self.configname, 'w')
-                f.close()
+            
+        if not os.path.isfile(self.configname):
+            self.configname = "configset.ini"
+            self.configname = os.path.join(configpath, self.configname)
+            f = open(self.configname, 'w')
+            f.close()
             self.read(self.configname)
-            #debug(configname_1 = self.configname)
+
+        self.configname = os.path.abspath(self.configname)
+        if os.path.isfile(self.configname):
+            print("CONFIGNAME:", os.path.abspath(self.configname))
+            self.read(self.configname)
+        else:
+            print("CONFIGNAME:", os.path.abspath(self.configname), " NOT a FILE !!!")
+            sys.exit("Please Set configname before !!!")
+
     
     def configfile(self, configfile):
         self.configname = configfile
         return self.configname
 
     def filename(self):
-        return self.configname
+        return os.path.abspath(self.configname)
 
     #def get_config_file(self, filename='', verbosity=None):
         #if not filename:
