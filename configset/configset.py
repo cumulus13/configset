@@ -14,7 +14,13 @@ import re
 from collections import OrderedDict
 import inspect
 # from make_colors import make_colors
-from pydebugger.debug import debug
+# SITE_PACKAGES = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'site-packages')
+# print(SITE_PACKAGES)
+# sys.path.append(SITE_PACKAGES)
+if not __name__ == '__main__':
+    def debug(*args, **kwargs):
+        for i in kwargs:
+            print("i =", kwargs.get(i))
 
 __platform__ = 'all'
 __contact__ = 'licface@yahoo.com'
@@ -39,7 +45,8 @@ class configset(ConfigParser.RawConfigParser):
         self.configname_str = configfile
         try:
             if os.path.isfile(self.configname):
-                print("CONFIGNAME:", os.path.abspath(self.configname))
+                if os.getenv('SHOW_CONFIGNAME'):
+                    print("CONFIGNAME:", os.path.abspath(self.configname))
         except:
             pass
         configpath = ''
@@ -74,7 +81,8 @@ class configset(ConfigParser.RawConfigParser):
         self.configname = os.path.abspath(self.configname)
         if os.path.isfile(self.configname):
             if not self.configname == self.configname_str:
-                print("CONFIGNAME:", os.path.abspath(self.configname))
+                if os.getenv('SHOW_CONFIGNAME'):
+                    print("CONFIGNAME:", os.path.abspath(self.configname))
             self.read(self.configname)
         else:
             print("CONFIGNAME:", os.path.abspath(self.configname), " NOT a FILE !!!")
@@ -644,4 +652,5 @@ class configset(ConfigParser.RawConfigParser):
 #usage = configset_class.usage
 
 if __name__ == '__main__':
+    from pydebugger.debug import debug
     usage()
