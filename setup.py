@@ -20,7 +20,7 @@ version = __version__.version
 
 setup(
     name="configset",
-    version=version,
+    version=str(version),
     url="https://bitbucket.org/licface/configset",
     project_urls={
         "Documentation": "https://bitbucket.org/licface/configset",
