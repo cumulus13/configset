@@ -8,7 +8,7 @@ else:
     import configparser as ConfigParser
 
 import os
-import traceback
+#import traceback
 import re
 from collections import OrderedDict
 import inspect
@@ -39,7 +39,7 @@ class configset(ConfigParser.RawConfigParser):
         self.path = None
 
         configfile = configfile or os.path.splitext(os.path.realpath(sys.argv[0]))[0] + ".ini"
-        
+
         self.configname = configfile + ".ini"
 
         self.configname = configfile
@@ -69,7 +69,7 @@ class configset(ConfigParser.RawConfigParser):
             f = open(self.configname, 'w')
             f.close()
             self.read(self.configname)
-        
+
         if not os.path.isfile(self.configname):
             print("CONFIGNAME:", os.path.abspath(self.configname), " NOT a FILE !!!")
             sys.exit("Please Set configname before !!!")
@@ -122,7 +122,7 @@ class configset(ConfigParser.RawConfigParser):
         try:
             self.write(cfg_data)
         except:
-            print(traceback.format_exc())
+            print(sys.exc_info())
             #import io
             #io_data = io.BytesIO(cfg_data.read().encode('utf-8'))
             #self.write(io_data)
@@ -132,7 +132,7 @@ class configset(ConfigParser.RawConfigParser):
 
     def write_config2(self, section, option, value='', configfile=''):
         self.configname = configfile or self.configname
-        
+
         if os.path.isfile(self.configname):
             self.read(self.configname)
         else:
@@ -148,7 +148,7 @@ class configset(ConfigParser.RawConfigParser):
                 return "\tNo Section Name: '%s'" %(section)
             except ConfigParser.NoOptionError:
                 return "\tNo Option Name: '%s'" %(option)
-            
+
             if sys.version_info.major == '2':
                 cfg_data = open(self.configname,'wb')
             else:
@@ -164,9 +164,9 @@ class configset(ConfigParser.RawConfigParser):
         """
             option: section, option, value=None
         """
-        
+
         self.read(self.configname)
-        
+
         try:
             data = self.get(section, option)
 
@@ -176,7 +176,7 @@ class configset(ConfigParser.RawConfigParser):
             try:
                 self.write_config(section, option, value)
             except:
-                print ("error:", traceback.format_exc())
+                print ("error:", sys.exc_info())
 
         return self.get(section, option)
 
@@ -333,17 +333,17 @@ class configset(ConfigParser.RawConfigParser):
             data = self.read_config(section, option, value)
         except ConfigParser.NoSectionError:
             if os.getenv('DEBUG'):
-                print (traceback.format_exc())
+                print (sys.exc_info())
             self.write_config(section, option, value)
             data = self.read_config(section, option, value)
         except ConfigParser.NoOptionError:
             if os.getenv('DEBUG'):
-                print (traceback.format_exc())
+                print (sys.exc_info())
             self.write_config(section, option, value)
             data = self.read_config(section, option, value)
         except:
             if os.getenv('DEBUG'):
-                print (traceback.format_exc())
+                print (sys.exc_info())
         #self.read(self.configname)
         if data == 'False' or data == 'false':
             return False
@@ -367,29 +367,29 @@ class configset(ConfigParser.RawConfigParser):
         try:
             data = self.read_config(section, option, value)
         except ConfigParser.NoSectionError:
-            print (traceback.format_exc())
+            print (sys.exc_info())
             self.write_config(section, option, value)
             data = self.read_config(section, option, value)
         except ConfigParser.NoOptionError:
-            print (traceback.format_exc())
+            print (sys.exc_info())
             self.write_config(section, option, value)
             data = self.read_config(section, option, value)
         except:
-            print (traceback.format_exc())
+            print (sys.exc_info())
         data = re.split("\n|, |,| ", data)
         data = list(filter(None, data))
         data_list = []
         dlist = []
-        
+
         for i in data:
-            
+
             if "[" in str(i) and "]" in str(i):
                 dl = re.findall("\[.*?\]", i)
-                
+
                 if dl:
                     for x in dl:
-                        
-                        
+
+
                         try:
                             dlist.append(ast.literal_eval(re.sub("\[|\]", "", x)))
                         except:
@@ -398,19 +398,19 @@ class configset(ConfigParser.RawConfigParser):
                             except Exception as e:
                                 print("ERROR:", e, "list string must be containt ' or \" example: ['data1', 'data2'] ")
                                 return False
-                        
+
                         # data = re.sub(x, "", data)
                         data.remove(x)
-                        
-                        
+
+
             else:
                 if "'" in i or '"' in i:
-                    
+
                     x = re.sub("'|\"", "", i)
-                    
+
                     dlist.append(x)
                     data.remove(i)
-        
+
         for i in data:
             if i.strip() == 'False' or i.strip() == 'false':
                 data_list.append(False)
@@ -431,11 +431,11 @@ class configset(ConfigParser.RawConfigParser):
         try:
             data = self.read_config2(section, option, filename)
         except ConfigParser.NoSectionError:
-            print (traceback.format_exc())
+            print (sys.exc_info())
             self.write_config(section, option, value)
             data = self.read_config2(section, option, filename)
         except ConfigParser.NoOptionError:
-            print (traceback.format_exc())
+            print (sys.exc_info())
             self.write_config(section, option, value)
             data = self.read_config2(section, option, filename)
         return data
@@ -449,11 +449,11 @@ class configset(ConfigParser.RawConfigParser):
         try:
             data = self.read_config3(section, option, filename)
         except ConfigParser.NoSectionError:
-            print (traceback.format_exc())
+            print (sys.exc_info())
             self.write_config(section, option, value)
             data = self.read_config3(section, option, filename)
         except ConfigParser.NoOptionError:
-            print (traceback.format_exc())
+            print (sys.exc_info())
             self.write_config(section, option, value)
             data = self.read_config3(section, option, filename)
         return data
@@ -467,12 +467,12 @@ class configset(ConfigParser.RawConfigParser):
         try:
             data = self.read_config4(section, option, filename)
         except ConfigParser.NoSectionError:
-            #print "Error 1 =", traceback.format_exc()
+            #print "Error 1 =", sys.exc_info()
             self.write_config(section, option, value)
             data = self.read_config4(section, option, filename)
             #print "data 1 =", data
         except ConfigParser.NoOptionError:
-            #print "Error 2 =", traceback.format_exc()
+            #print "Error 2 =", sys.exc_info()
             self.write_config(section, option, value)
             data = self.read_config4(section, option, filename)
             #print "data 2 =", data
@@ -488,11 +488,11 @@ class configset(ConfigParser.RawConfigParser):
         try:
             data = self.read_config5(section, option, filename)
         except ConfigParser.NoSectionError:
-            print (traceback.format_exc())
+            print (sys.exc_info())
             self.write_config(section, option, value)
             data = self.read_config5(section, option, filename)
         except ConfigParser.NoOptionError:
-            print (traceback.format_exc())
+            print (sys.exc_info())
             self.write_config(section, option, value)
             data = self.read_config5(section, option, filename)
         return data
@@ -506,11 +506,11 @@ class configset(ConfigParser.RawConfigParser):
         try:
             data = self.read_config6(section, option, filename)
         except ConfigParser.NoSectionError:
-            print (traceback.format_exc())
+            print (sys.exc_info())
             self.write_config(section, option, value)
             data = self.read_config6(section, option, filename)
         except ConfigParser.NoOptionError:
-            print (traceback.format_exc())
+            print (sys.exc_info())
             self.write_config(section, option, value)
             data = self.read_config6(section, option, filename)
         return data
@@ -608,17 +608,17 @@ class configset(ConfigParser.RawConfigParser):
                             self.read_config6(args.section, args.option)
                     else:
                         print ("INVALID TYPE !")
-                        
+
                         print ("\n")
                         parser.print_help()
                 else:
                     print ("Please use '-r' for read or '-w' for write")
-                    
+
                     print ("\n")
                     parser.print_help()
             else:
                 print ("NO FILE CONFIG !")
-                
+
                 print ("\n")
                 parser.print_help()
 
