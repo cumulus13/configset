@@ -38,8 +38,8 @@ class configset(ConfigParser.RawConfigParser):
         #self.cfg = ConfigParser.RawConfigParser(allow_no_value=True)
         self.path = None
 
-        configfile = configfile or os.path.splitext(os.path.realpath(sys.argv[0]))[0] + ".ini"
-
+        # configfile = configfile or os.path.splitext(os.path.realpath(sys.argv[0]))[0] + ".ini"
+        
         self.configname = configfile + ".ini"
 
         self.configname = configfile
@@ -55,21 +55,23 @@ class configset(ConfigParser.RawConfigParser):
         configpath = ''
         configpath = inspect.stack()[1][3]
 
-        if os.path.isfile(configpath):
-            configpath = os.path.dirname(configpath)
-        else:
-            configpath = os.getcwd()
+        #if os.path.isfile(configpath):
+            #configpath = os.path.dirname(configpath)
+        #else:
+            #configpath = os.getcwd()
 
         configpath = os.path.realpath(configpath)
 
-        if not self.path:
-            self.path = os.path.dirname(inspect.stack()[0][1])
-
+        if not self.path: self.path = os.path.dirname(inspect.stack()[0][1])
+        #print("self.configname [0]:", self.configname)
+        if not os.path.splitext(self.configname)[-1]:
+            self.configname = configpath + self.configname
+        #print("self.configname [1]:", self.configname)
         if not os.path.isfile(self.configname):
             f = open(self.configname, 'w')
             f.close()
             self.read(self.configname)
-
+        
         if not os.path.isfile(self.configname):
             print("CONFIGNAME:", os.path.abspath(self.configname), " NOT a FILE !!!")
             sys.exit("Please Set configname before !!!")
