@@ -38,6 +38,7 @@ class configset(ConfigParser.RawConfigParser):
         self.allow_no_value = True
         self.optionxform = str
         self.configfile = configfile
+        configpath = None
         if os.getenv(('debug_extra' or 'DEBUG_EXTRA')): print("configfile x:", configfile)
         if self.configfile:
             if os.getenv(('debug_extra' or 'DEBUG_EXTRA')): print("os.path.splitext(configfile)[-1]:", os.path.splitext(configfile)[-1])
@@ -53,16 +54,33 @@ class configset(ConfigParser.RawConfigParser):
         if os.getenv(('debug_extra' or 'DEBUG_EXTRA')): print("is FILE: self.configfile:", os.path.isfile(self.configfile))
         
         if not os.path.isfile(self.configfile):
-            #n = 0
-            #for i in inspect.stack():
-                #print("[{}]: ".format(n), i)
-                #n += 1
-                #print("-" *120)
+            if os.getenv(('debug_extra' or 'DEBUG_EXTRA')):
+                print("inspect.stack():", inspect.stack())
+                n = 0
+                for i in inspect.stack():
+                    print("[{}]: ".format(n), i)
+                    n += 1
+                    print("-" *120)
+            
             if os.getenv(('debug_extra' or 'DEBUG_EXTRA')): print("len(inspect.stack():", len(inspect.stack()))
             if len(inspect.stack()) > 5:
                 if os.path.isfile(inspect.stack()[-2][1]):
                     configpath = os.path.splitext(inspect.stack()[4][1])[0]
                     if os.getenv(('debug_extra' or 'DEBUG_EXTRA')): print("configpath [0]:", configpath)
+                elif os.path.isfile(inspect.stack()[-1][1]):
+                    configpath = os.path.splitext(inspect.stack()[-1][1])[0]
+                if 'importlib' in str(configpath) or 'frozen' in str(configpath):
+                    file_init = list(filter(lambda k: '__init__.py' in k[1], inspect.stack()))
+                    if os.getenv(('debug_extra' or 'DEBUG_EXTRA')): print("file_init:", file_init)
+                    for x in file_init:
+                        #print("X =", x[1].split(os.path.sep))
+                        #print("+" *100)
+                        BASE_DATA = x[1].split(os.path.sep)
+                        if x[1].split(os.path.sep)[-3] == 'site-packages' or x[1].split(os.path.sep)[-3] == 'dist-packages':
+                            configpath = "{}".format(os.path.sep.join(BASE_DATA[:-1])) + os.path.sep + BASE_DATA[-2]
+                                
+                if os.getenv(('debug_extra' or 'DEBUG_EXTRA')): print("configpath [0]:", configpath)
+                #sys.exit()
             elif len(inspect.stack()) < 5:
                 configpath = inspect.stack()[1][1]
                 if os.path.isfile(inspect.stack()[1][1]):
@@ -73,18 +91,22 @@ class configset(ConfigParser.RawConfigParser):
                 if os.getenv(('debug_extra' or 'DEBUG_EXTRA')): print("configpath [2]:", configpath)
                 if os.path.splitext(configpath)[-1] == ".py":
                     configpath = os.path.splitext(configpath)[0]
-            self.configfile = configpath + ".ini"
+                self.configfile = configpath + ".ini"
             if os.getenv(('debug_extra' or 'DEBUG_EXTRA')): print("self.configfile [1]:", self.configfile)
-            
-            if not os.path.isfile(self.configfile):
-                f = open(self.configfile, 'w').close()
+            if self.configfile:
+                if not os.path.isfile(self.configfile):
+                    f = open(self.configfile, 'w').close()
                 #f.close()
-
-        if not os.path.isfile(self.configfile):
-            print("CONFIGFILE:", os.path.abspath(self.configfile), " NOT a FILE !!!")
-            sys.exit("Please Set configname before !!!")
+        
+        if self.configfile:
+            print("CONFIGFILE:", os.path.realpath(self.configfile))
+            if not os.path.isfile(self.configfile):
+                print("CONFIGFILE:", os.path.abspath(self.configfile), " NOT a FILE !!!")
+                sys.exit("Please Set configname before !!!")
+            else:
+                self.read(self.configfile)
         else:
-            self.read(self.configfile)
+            sys.exit("No Valid Config File !")
         if os.getenv('SHOW_CONFIGNAME') or os.getenv('SHOW_CONFIGFILE') : print("CONFIGFILE:", os.path.realpath(self.configfile))
         
         #if os.getenv(('debug_extra' or 'DEBUG_EXTRA')): sys.exit()
