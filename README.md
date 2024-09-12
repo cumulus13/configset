@@ -28,7 +28,7 @@ class pcloud(object):
 
     def __init__(self, **kwargs):
         ...
-        #self.CONFIG .configname = os.path.join(os.path.dirname(__file__), 'config.ini') #for python start from 2.5 
+        #self.CONFIG = configset(os.path.join(os.path.dirname(__file__), 'config.ini')) #for python start from 2.5 
         self.CONFIG = configset(str(Path(__file__).parent / 'config.ini') #for python or just
         #self.CONFIG = configset() #this will create *.ini file base on this file name
         ...
