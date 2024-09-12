@@ -10,7 +10,7 @@ except:
     pass
 shutil.copy2('__version__.py', 'configset')
 
-with io.open("README.rst", "rt", encoding="utf8") as f:
+with io.open("README.md", "rt", encoding="utf8") as f:
     readme = f.read()
 
 # with io.open("__version__.py", "rt", encoding="utf8") as f:
