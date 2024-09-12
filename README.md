@@ -22,23 +22,28 @@ What does it look like? Here is an example of a simple configset program:
 ```python:
 
 import configset
+from pathlib import Path #for last version of python 2.7 and 3.+
 
 class pcloud(object):
 
     def __init__(self, **kwargs):
         ...
-        self.CONFIG.configname = os.path.join(os.path.dirname(__file__), 'config.ini')
-        self.CONFIG = configset.configset(self.CONFIG.configname)
+        #self.CONFIG .configname = os.path.join(os.path.dirname(__file__), 'config.ini') #for python start from 2.5 
+        self.CONFIG = configset(str(Path(__file__).parent / 'config.ini') #for python or just
+        #self.CONFIG = configset() #this will create *.ini file base on this file name
         ...
 
-        self.username = self.CONFIG.read_config('AUTH', 'username', "admin")
-        self.password = self.CONFIG.read_config('AUTH', 'password', "12345678")
+        self.username = self.CONFIG.get_config('AUTH', 'username', "admin") # 'admin' is default value
+        self.password = self.CONFIG.get_config('AUTH', 'password', "12345678") # "12345678" is default value
+
+        self.port = self.CONFIG.get_config_as_list('MAIN', 'PORTS') # outputs is list, example ['8181', '55', '32']
+        self.host = self.CONFIG.write_config('MAIN', 'HOST', '127.0.0.1')  # this will write HOST = '127.0.0.1' on section [MAIN]
         ...
 ```
 
 ## Support
 
-*   Python 2.7 +, 3.x+
+*   Python 2.7+, 3.x+
 *   Windows, Linux
 
 ## author
