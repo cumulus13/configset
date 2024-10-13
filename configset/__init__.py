@@ -1,4 +1,4 @@
-import imp
+#import imp
 try:
 	from . import __version__ as version
 except:
