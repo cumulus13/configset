@@ -1,866 +1,756 @@
-from __future__ import print_function
+"""
+Enhanced Configuration Management Library
+Provides easy-to-use configuration file handling with INI and JSON support.
+"""
+
+from __future__ import annotations
 import sys
 import argparse
-
-if sys.version_info.major == 2:
-    import ConfigParser
-else:
-    import configparser as ConfigParser
-
 import os
 import traceback
 import re
+import json
+import ast
 from collections import OrderedDict
-import inspect
-import ast, json
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Union, Tuple
+from functools import wraps
 
-IS_RICH = False
-IS_JSONCOLOR = False
-IS_MAKECOLOR = False
+# Python 2/3 compatibility
+if sys.version_info.major == 2:
+    import ConfigParser
+    configparser = ConfigParser
+else:
+    import configparser
 
-console = None
+# Optional dependencies for enhanced output
 try:
     from rich import print_json
     from rich.console import Console
-    console = Console()
-    IS_RICH = True
-except Exception:
+    from rich import traceback as rich_traceback
+    _console = Console()
+    HAS_RICH = True
+except ImportError:
+    HAS_RICH = False
     try:
         from jsoncolor import jprint
-        IS_JSONCOLOR = True
-    except Exception:
+        HAS_JSONCOLOR = True
+    except ImportError:
+        HAS_JSONCOLOR = False
         try:
             from make_colors import make_colors
-            IS_MAKECOLOR = True
-        except Exception:
-            pass
+            HAS_MAKECOLOR = True
+        except ImportError:
+            HAS_MAKECOLOR = False
 
-if not __name__ == '__main__':
-    def debug(*args, **kwargs):
-        for i in kwargs:
-            print(i, "=" , kwargs.get(i), type(kwargs.get(i)))
+if HAS_RICH:
+    try:
+        from licface import CustomRichHelpFormatter
+    except:
+        CustomRichHelpFormatter = argparse.RawTextHelpFormatter
 
-__platform__ = 'all'
-__contact__ = 'licface@yahoo.com'
+    rich_traceback.install(show_locals = False, width=os.get_terminal_size()[0], theme = 'fruity')
 
-class MultiOrderedDict(OrderedDict):
-    def __setitem__(self, key, value):
-        if isinstance(value, list) and key in self:
-            self[key].extend(value)
-        else:
-            super(OrderedDict, self).__setitem__(key, value)
 
-class configset(ConfigParser.RawConfigParser):
-    def __init__(self, configfile = '', auto_write = True, *args, **kwargs):
-        #ConfigParser.RawConfigParser.__init__(self)
-        super().__init__(*args, **kwargs)
-        
-        self.allow_no_value = True
-        self.optionxform = str
-
-        #self.cfg = ConfigParser.RawConfigParser(allow_no_value=True)
-        self.path = None
-
-        configfile = configfile or os.path.splitext(os.path.realpath(sys.argv[0]))[0] + ".ini"
-        
-        self.configname = configfile + ".ini" if not configfile.endswith(".ini") else configfile
-
-        self.configname = configfile
-        self.configname_str = configfile
-        
-        self.read(configfile)
-        try:
-            if os.path.isfile(self.configname):
-                if os.getenv('SHOW_CONFIGNAME'):
-                    print("CONFIGNAME:", os.path.realpath(self.configname))
-        except:
-            pass
-
-        configpath = ''
-        configpath = inspect.stack()[1][3]
-
-        if os.path.isfile(configpath):
-            configpath = os.path.dirname(configpath)
-        else:
-            configpath = os.getcwd()
-
-        configpath = os.path.realpath(configpath)
-
-        if not self.path:
-            self.path = os.path.dirname(inspect.stack()[0][1])
-        
-        if not os.path.isfile(self.configname) and auto_write:
-            f = open(self.configname, 'w')
-            f.close()
-            self.read(self.configname, encoding = 'utf-8')
-        
-        if not os.path.isfile(self.configname):
-            print("CONFIGNAME:", os.path.abspath(self.configname), " NOT a FILE !!!")
-            sys.exit("Please Set configname before !!!")
-
-    def configfile(self, configfile):
-        if configfile:
-            self.configname = os.path.realpath(configfile)
-        return self.configname
-
-    def config_file(self, configfile):
-        return self.configfile(configfile)
-
-    def set_configfile(self, configfile):
-        return self.configfile(configfile)
-
-    def set_config_file(self, configfile):
-        return self.set_configfile(configfile)
-
-    def filename(self):
-        return os.path.realpath(self.configname)
-
-    def get_configfile(self):
-        return os.path.realpath(self.configname)
-
-    def get_config_file(self):
-        return os.path.realpath(self.configname)
-
-    def write_config(self, section, option, value='', configfile = None):
-        self.configname = configfile or self.configname
-        if os.path.isfile(self.configname):
-            self.read(self.configname, encoding = 'utf-8')
-        else:
-            print("Not a file:", self.configname)
-            sys.exit("Not a file: " + self.configname)
-
-        value = value or ''
-
-        try:
-            self.set(section, option, value)
-        except ConfigParser.NoSectionError:
-            self.add_section(section)
-            self.set(section, option, value)
-        except ConfigParser.NoOptionError:
-            self.set(section, option, value)
-
-        if sys.version_info.major == '2':
-            cfg_data = open(self.configname,'wb')
-        else:
-            cfg_data = open(self.configname,'w')
-
-        try:
-            self.write(cfg_data)
-        except:
+def get_version():
+    """
+    Get the version.
+    Version is taken from the __version__.py file if it exists.
+    The content of __version__.py should be:
+    version = "0.33"
+    """
+    try:
+        version_file = Path(__file__).parent / "__version__.py"
+        if version_file.is_file():
+            with open(version_file, "r") as f:
+                for line in f:
+                    if line.strip().startswith("version"):
+                        parts = line.split("=")
+                        if len(parts) == 2:
+                            return parts[1].strip().strip('"').strip("'")
+    except Exception as e:
+        if os.getenv('TRACEBACK') and os.getenv('TRACEBACK') in ['1', 'true', 'True']:
             print(traceback.format_exc())
-            #import io
-            #io_data = io.BytesIO(cfg_data.read().encode('utf-8'))
-            #self.write(io_data)
-        cfg_data.close()
-
-        return self.read_config(section, option)
-
-    def write_config2(self, section, option, value='', configfile=''):
-        self.configname = configfile or self.configname
-        
-        if os.path.isfile(self.configname):
-            self.read(self.configname, encoding = 'utf-8')
         else:
-            print("Not a file:", self.configname)
-            sys.exit("Not a file: " + self.configname)
+            print(f"ERROR: {e}")
 
-        if not value == None:
+    return "0.0.0"
 
-            try:
-                self.get(section, option)
-                self.set(section, option, value)
-            except ConfigParser.NoSectionError:
-                return "\tNo Section Name: '%s'" %(section)
-            except ConfigParser.NoOptionError:
-                return "\tNo Option Name: '%s'" %(option)
-            
-            if sys.version_info.major == '2':
-                cfg_data = open(self.configname,'wb')
-            else:
-                cfg_data = open(self.configname,'w')
+__version__ = get_version()
+__platform__ = "all"
+__contact__ = "licface@yahoo.com"
+__all__ = ["ConfigSet", "CONFIG", "MultiOrderedDict"]
 
-            self.write(cfg_data)
-            cfg_data.close()
-            return self.read_config(section, option)
-        else:
-            return None
 
-    def read_config(self, section, option, value = None, auto_write = True):
-        """
-            option: section, option, value=None
-        """
-        
-        self.read(self.configname, encoding = 'utf-8')
-        
-        try:
-            data = self.get(section, option)
-
-            if value and not data and auto_write:
-                self.write_config(section, option, value)
-            elif value and not data:
-                return value
-        except:
-            try:
-                if auto_write:
-                    self.write_config(section, option, value)
-                return value
-            except:
-                print ("error:", traceback.format_exc())
-        try:
-            data = self.get(section, option)
-            return data if data else value
-        except:
-            return value
-
-    def read_config2(self, section, option, value = None, configfile=''): #format ['aaa','bbb','ccc','ddd']
-        """
-            option: section, option, filename=''
-            format output: ['aaa','bbb','ccc','ddd']
-
-        """
-
-        return self.get_config_as_list(section, option, value)
-
-    def read_config_as_list(self, section, option, value = None, configfile=''): #format ['aaa','bbb','ccc','ddd']
-        return self.get_config_as_list(section, option, value)
-
-    def read_config3(self, section, option, value = None, filename=''): #format result: [[aaa.bbb.ccc.ddd, eee.fff.ggg.hhh], qqq.xxx.yyy.zzz]
-        """
-            option: section, option, filename=''
-            format output first: [[aaa.bbb.ccc.ddd, eee.fff.ggg.hhh], qqq.xxx.yyy.zzz]
-            note: if not separated by comma then second output is normal
-
-        """
-
-        self.dict_type = MultiOrderedDict
-        if filename:
-            if os.path.isfile(filename):
-                self.read(filename, encoding = 'utf-8')
-        else:
-            self.read(self.configname, encoding = 'utf-8')
-
-        data = []
-        cfg = self.get(section, option)
-
-        for i in cfg:
-            if "," in i:
-                d1 = str(i).split(",")
-                d2 = []
-                for j in d1:
-                    d2.append(str(j).strip())
-                data.append(d2)
-            else:
-                data.append(i)
-        self.dict_type = None
-        self.read(self.configname, encoding = 'utf-8')
-        return data
-
-    def read_config4(self, section, option, value = '', filename='', verbosity=None): #format result: [aaa.bbb.ccc.ddd, eee.fff.ggg.hhh, qqq.xxx.yyy.zzz]
-        """
-            option: section, option, filename=''
-            format result: [aaa.bbb.ccc.ddd, eee.fff.ggg.hhh, qqq.xxx.yyy.zzz]
-            note: all output would be array/tuple
-
-        """
-        self.dict_type = MultiOrderedDict
-        if filename:
-            if os.path.isfile(filename):
-                self.read(filename, encoding = 'utf-8')
-        else:
-            self.read(self.configname, encoding = 'utf-8')
-        data = []
-        try:
-            cfg = self.get(section, option)
-            if not cfg == None:
-                for i in cfg:
-                    if "," in i:
-                        d1 = str(i).split(",")
-                        for j in d1:
-                            data.append(str(j).strip())
-                    else:
-                        data.append(i)
-                self.dict_type = None
-                self.read(self.configname, encoding = 'utf-8')
-                return data
-            else:
-                self.dict_type = None
-                self.read(self.configname, encoding = 'utf-8')
-                return None
-        except:
-            data = self.write_config(section, option, filename, value)
-            self.dict_type = None
-            self.read(self.configname, encoding = 'utf-8')
-            return data
-
-    def read_config5(self, section, option, filename='', verbosity=None): #format result: {aaa:bbb, ccc:ddd, eee:fff, ggg:hhh, qqq:xxx, yyy:zzz}
-        """
-            option: section, option, filename=''
-            input separate is ":" and commas example: aaa:bbb, ccc:ddd
-            format result: {aaa:bbb, ccc:ddd, eee:fff, ggg:hhh, qqq:xxx, yyy:zzz}
-
-        """
-        self.dict_type = MultiOrderedDict
-        if filename:
-            if os.path.isfile(filename):
-                self.read(filename, encoding = 'utf-8')
-        else:
-            self.read(self.configname, encoding = 'utf-8')
-        data = {}
-
-        cfg = self.get(section, option)
-        for i in cfg:
-            if "," in i:
-                d1 = str(i).split(",")
-                for j in d1:
-                    d2 = str(j).split(":")
-                    data.update({str(d2[0]).strip():int(str(d2[1]).strip())})
-            else:
-                for x in i:
-                    e1 = str(x).split(":")
-                    data.update({str(e1[0]).strip():int(str(e1[1]).strip())})
-        self.dict_type = None
-        self.read(self.configname, encoding = 'utf-8')
-        return data
-
-    def read_config6(self, section, option, filename='', verbosity=None): #format result: {aaa:[bbb, ccc], ddd:[eee, fff], ggg:[hhh, qqq], xxx:[yyy:zzz]}
-        """
-
-            option: section, option, filename=''
-            format result: {aaa:bbb, ccc:ddd, eee:fff, ggg:hhh, qqq:xxx, yyy:zzz}
-
-        """
-        self.dict_type = MultiOrderedDict
-        if filename:
-            if os.path.isfile(filename):
-                self.read(filename, encoding = 'utf-8')
-        else:
-            self.read(self.configname, encoding = 'utf-8')
-        data = {}
-
-        cfg = self.get(section, option)
-        for i in cfg:
-            if ":" in i:
-                d1 = str(i).split(":")
-                d2 = int(str(d1[0]).strip())
-                for j in d1[1]:
-                    d3 = re.split("['|','|']", d1[1])
-                    d4 = str(d3[1]).strip()
-                    d5 = str(d3[-2]).strip()
-                    data.update({d2:[d4, d5]})
-            else:
-                pass
-        self.dict_type = None
-        self.read(self.configname, encoding = 'utf-8')
-        return data
-
-    def find(self, query, verbose = False, case_sensitive = True):
-        found = []
-        if not query: return
-        self.read(self.configname, encoding = 'utf-8')
-        for section in self.sections():
-            if os.getenv('DEBUG') or os.getenv('DEBUG_SERVER'):
-                print(f"section: {section}")
-            if section and case_sensitive and section == query:
-                found.append(['section', query])
-                if verbose: print("[" + section + "]")
-            elif section and not case_sensitive and section.lower() == query.lower():
-                found.append(['section', query])
-                if verbose: print("[" + section + "]")
-
-            try:
-                if query in self.options(section):
-                    found.append([section, query])
-                    if verbose:
-                        print("[" + section + "]")
-                        print("  " + query + " =", self.get_config(section, query))
-            except:
-                pass
-        
-        return True if found else False
-        
-    def get_config(self, section, option, value=None, auto_write = True):
-        data = None
-        if value and not isinstance(value, str): value = str(value)
-
-        if not value or value == 'None': value = ''
-
-        self.read(self.configname, encoding = 'utf-8')
-        
-        try:
-            data = self.get(section, option)
-        except ConfigParser.NoSectionError:
-            if os.getenv('DEBUG'):
-                print (traceback.format_exc())
-            if auto_write: self.write_config(section, option, value)
-            return self.get_config(section, option, value, auto_write)
-        except ConfigParser.NoOptionError:
-            if os.getenv('DEBUG'): print (traceback.format_exc())
-            if auto_write: self.write_config(section, option, value)
-            return self.get_config(section, option, value, auto_write)
-        except:
-            if os.getenv('DEBUG'): print (traceback.format_exc())
-        if data == 'False' or data == 'false':
-            return False
-        elif data == 'True' or data == 'true':
-            return True
-        elif str(data).isdigit():
-            return int(data)
-        else:
-            return data
-
-    def get_config_as_list(self, section, option, value=None):
-        '''
-            value (str): string comma delimiter or string tuple/list : data1, data2, datax or [data1, data2, datax] or (data1, data2, datax)
-        '''
-        if value and not isinstance(value, str):
-            value = str(value)
-
-        if not value:
-            value = ''
-        self.read(self.configname, encoding = 'utf-8')
-        try:
-            data = self.read_config(section, option, value)
-        except ConfigParser.NoSectionError:
-            print (traceback.format_exc())
-            self.write_config(section, option, value)
-            data = self.read_config(section, option, value)
-        except ConfigParser.NoOptionError:
-            print (traceback.format_exc())
-            self.write_config(section, option, value)
-            data = self.read_config(section, option, value)
-        except:
-            print (traceback.format_exc())
-        data = re.split("\n|, |,| ", data)
-        data = list(filter(None, data))
-        data_list = []
-        dlist = []
-        
-        for i in data:
-            
-            if "[" in str(i) and "]" in str(i):
-                dl = re.findall("\[.*?\]", i)
-                
-                if dl:
-                    for x in dl:
-                        
-                        
-                        try:
-                            dlist.append(ast.literal_eval(re.sub("\[|\]", "", x)))
-                        except:
-                            try:
-                                dlist.append(json.loads(x))
-                            except Exception as e:
-                                print("ERROR:", e, "list string must be containt ' or \" example: ['data1', 'data2'] ")
-                                return False
-                        
-                        # data = re.sub(x, "", data)
-                        data.remove(x)
-                        
-                        
-            else:
-                if "'" in i or '"' in i:
-                    
-                    x = re.sub("'|\"", "", i)
-                    
-                    dlist.append(x)
-                    data.remove(i)
-        
-        for i in data:
-            if i.strip() == 'False' or i.strip() == 'false':
-                data_list.append(False)
-            elif i.strip() == 'True' or i.strip() == 'true':
-                data_list.append(True)
-            elif str(i).strip().isdigit():
-                data_list.append(int(i.strip()))
-            else:
-                  data_list.append(i.strip())
-        return dlist + data_list
-
-    def get_config2(self, section, option, value = '', filename='', verbosity=None):
-        if os.path.isfile(filename):
-            self.read(filename, encoding = 'utf-8')
-        else:
-            filename = self.configname
-            self.read(self.configname, encoding = 'utf-8')
-        try:
-            data = self.read_config2(section, option, filename)
-        except ConfigParser.NoSectionError:
-            print (traceback.format_exc())
-            self.write_config(section, option, value)
-            data = self.read_config2(section, option, filename)
-        except ConfigParser.NoOptionError:
-            print (traceback.format_exc())
-            self.write_config(section, option, value)
-            data = self.read_config2(section, option, filename)
-        return data
-
-    def get_config3(self, section, option, value = '', filename='', verbosity=None):
-        if os.path.isfile(filename):
-            self.read(filename, encoding = 'utf-8')
-        else:
-            filename = self.configname
-            self.read(self.configname, encoding = 'utf-8')
-        try:
-            data = self.read_config3(section, option, filename)
-        except ConfigParser.NoSectionError:
-            print (traceback.format_exc())
-            self.write_config(section, option, value)
-            data = self.read_config3(section, option, filename)
-        except ConfigParser.NoOptionError:
-            print (traceback.format_exc())
-            self.write_config(section, option, value)
-            data = self.read_config3(section, option, filename)
-        return data
-
-    def get_config4(self, section, option, value = '', filename='', verbosity=None):
-        if os.path.isfile(filename):
-            self.read(filename, encoding = 'utf-8')
-        else:
-            filename = self.configname
-            self.read(self.configname, encoding = 'utf-8')
-        try:
-            data = self.read_config4(section, option, filename)
-        except ConfigParser.NoSectionError:
-            #print "Error 1 =", traceback.format_exc()
-            self.write_config(section, option, value)
-            data = self.read_config4(section, option, filename)
-            #print "data 1 =", data
-        except ConfigParser.NoOptionError:
-            #print "Error 2 =", traceback.format_exc()
-            self.write_config(section, option, value)
-            data = self.read_config4(section, option, filename)
-            #print "data 2 =", data
-        #print "DATA =", data
-        return data
-
-    def get_config5(self, section, option, value = '', filename='', verbosity=None):
-        if os.path.isfile(filename):
-            self.read(filename, encoding = 'utf-8')
-        else:
-            filename = self.configname
-            self.read(self.configname, encoding = 'utf-8')
-        try:
-            data = self.read_config5(section, option, filename)
-        except ConfigParser.NoSectionError:
-            print (traceback.format_exc())
-            self.write_config(section, option, value)
-            data = self.read_config5(section, option, filename)
-        except ConfigParser.NoOptionError:
-            print (traceback.format_exc())
-            self.write_config(section, option, value)
-            data = self.read_config5(section, option, filename)
-        return data
-
-    def get_config6(self, section, option, value = '', filename='', verbosity=None):
-        if os.path.isfile(filename):
-            self.read(filename, encoding = 'utf-8')
-        else:
-            filename = self.configname
-            self.read(self.configname, encoding = 'utf-8')
-        try:
-            data = self.read_config6(section, option, filename)
-        except ConfigParser.NoSectionError:
-            print (traceback.format_exc())
-            self.write_config(section, option, value)
-            data = self.read_config6(section, option, filename)
-        except ConfigParser.NoOptionError:
-            print (traceback.format_exc())
-            self.write_config(section, option, value)
-            data = self.read_config6(section, option, filename)
-        return data
-
-    def write_all_config(self, filename='', verbosity=None):
-        if os.path.isfile(filename):
-            self.read(filename, encoding = 'utf-8')
-        else:
-            filename = self.configname
-            self.read(self.configname, encoding = 'utf-8')
-
-    def _print(self, data, dtype = None, value=None):
-            
-        if data and dtype:
-            if dtype in ['section', 'sections', 's']:
-                if IS_RICH:
-                    console.print("[bold #00FFFF]\[" + data + "][/]")
-                elif IS_MAKECOLOR:
-                    print(make_colors("[" + data + "]", 'lc'))
-            elif dtype in ['option', 'options', 'o']:
-                if IS_RICH:
-                    console.print("   [bold #FFFF00]\[" + data + "][/]" + "[bold #FF00FF] = [/]" + "[bold #FFAA00]" + value + "[/]")
-                elif IS_MAKECOLOR:
-                    print(make_colors("   [" + data + "]", 'ly') + make_colors(" = ", 'lm') + make_colors(value, 'lw', 'r'))
-                    
-    def read_all_config(self, section=[]):
-        print("CONFIGFILE:", self.configname)
-        self.read(self.configname, encoding = 'utf-8')
-        dbank = []
-        if section:
-            for i in section:
-                # print("[" + i + "]")
-                self._print(i, 's')
-                options = self.options(i)
-                data = {}
-                for o in options:
-                    d = self.get(i, o)
-                    # print("   " + o + "=" + d)
-                    self._print(o, 's')
-                    data.update({o: d})
-                dbank.append([i, data])
-        else:
-            for i in self.sections():
-                #section.append(i)
-                # print("[" + i + "]")
-                self._print(i, 's')
-                data = {}
-                for x in self.options(i):
-                    d = self.get(i, x)
-                    # print("   " + x + "=" + d)
-                    self._print(x, 's')
-                    data.update({x:d})
-                dbank.append([i,data])
-        print("\n")
-        
-        class __str__:
-            if IS_RICH:
-                print_json(data = dbank)
-            elif IS_JSONCOLOR:
-                jprint(dbank)
-        class __call__:
-            if IS_RICH:
-                print_json(data = dbank)
-            elif IS_JSONCOLOR:
-                jprint(dbank)
-        return dbank
-
-    def read_all_section(self, filename='', section='server'):
-        if os.path.isfile(filename):
-            self.read(filename, encoding = 'utf-8')
-        else:
-            filename = self.configname
-            self.read(self.configname, encoding = 'utf-8')
-
-        dbank = []
-        dhost = []
-        for x in self.options(section):
-            d = self.get(section, x)
-            #data.update({x:d})
-            dbank.append(d)
-            if d:
-                if ":" in d:
-                    data = str(d).split(":")
-                    host = str(data[0]).strip()
-                    port = int(str(data[1]).strip())
-                    dhost.append([host,  port])
-
-        return [dhost,  dbank]
-
-    def usage(self):
-        parser = argparse.ArgumentParser(formatter_class= argparse.RawTextHelpFormatter)
-        parser.add_argument('CONFIG_FILE', action = 'store', help = 'Config file name path')
-        parser.add_argument('-r', '--read', help = 'Read Action', action = 'store_true')
-        parser.add_argument('-w', '--write', help = 'Write Action', action = 'store_true')
-        parser.add_argument('-s', '--section', help = 'Section Write/Read', action = 'store')
-        parser.add_argument('-o', '--option', help = 'Option Write/Read', action = 'store')
-        parser.add_argument('-t', '--type', help = 'Type Write/Read', action = 'store', default = 1, type = int)
-        if len(sys.argv) == 1:
-            print ("\n")
-            parser.print_help()
-        else:
-            print ("\n")
-            args = parser.parse_args()
-            if args.CONFIG_FILE:
-                self.configname =args.CONFIG_FILE
-                if args.read:
-                    if args.type == 1:
-                        if args.section and args.option:
-                            self.read_config(args.section, args.option)
-                    elif args.type == 2:
-                        if args.section and args.option:
-                            self.read_config2(args.section, args.option)
-                    elif args.type == 3:
-                        if args.section and args.option:
-                            self.read_config3(args.section, args.option)
-                    elif args.type == 4:
-                        if args.section and args.option:
-                            self.read_config4(args.section, args.option)
-                    elif args.type == 5:
-                        if args.section and args.option:
-                            self.read_config5(args.section, args.option)
-                    elif args.type == 6:
-                        if args.section and args.option:
-                            self.read_config6(args.section, args.option)
-                    else:
-                        print ("INVALID TYPE !")
-                        
-                        print ("\n")
-                        parser.print_help()
-                else:
-                    print ("Please use '-r' for read or '-w' for write")
-                    
-                    print ("\n")
-                    parser.print_help()
-            else:
-                print ("NO FILE CONFIG !")
-                
-                print ("\n")
-                parser.print_help()
-
-def is_debug_enabled():
+def _debug_enabled() -> bool:
+    """Check if debug mode is enabled via environment variables."""
     return (os.getenv('DEBUG', '').lower() in ['1', 'true', 'yes'] or
             os.getenv('DEBUG_SERVER', '').lower() in ['1', 'true', 'yes'])
 
-class ClassConfigMeta(type):
+
+class MultiOrderedDict(OrderedDict):
+    """OrderedDict that extends lists when duplicate keys are encountered."""
+    
+    def __setitem__(self, key: str, value: Any) -> None:
+        if isinstance(value, list) and key in self:
+            self[key].extend(value)
+        else:
+            super().__setitem__(key, value)
+
+
+class ConfigSet(configparser.RawConfigParser):
+    """
+    Enhanced configuration file manager supporting INI format with automatic
+    file creation, type conversion, and various data parsing methods.
+    """
+    
+    def __init__(self, config_file: str = '', auto_write: bool = True, **kwargs):
+        """
+        Initialize ConfigSet instance.
+        
+        Args:
+            config_file: Path to configuration file
+            auto_write: Whether to automatically create missing files/sections
+            **kwargs: Additional arguments passed to RawConfigParser
+        """
+        super().__init__(**kwargs)
+        
+        self.allow_no_value = True
+        self.optionxform = str  # Preserve case sensitivity
+        
+        # Determine config file path
+        if not config_file:
+            # Default to script name with .ini extension
+            script_path = sys.argv[0] if sys.argv else 'config'
+            config_file = os.path.splitext(os.path.realpath(script_path))[0] + ".ini"
+        
+        # Ensure .ini extension
+        if not config_file.endswith('.ini'):
+            config_file += '.ini'
+            
+        self.config_file = Path(config_file).resolve()
+        self._auto_write = auto_write
+        
+        # Create file if it doesn't exist and auto_write is enabled
+        if not self.config_file.exists() and auto_write:
+            self.config_file.touch()
+            
+        # Load existing configuration
+        if self.config_file.exists():
+            self._load_config()
+            if os.getenv('SHOW_CONFIGNAME'):
+                print(f"CONFIG FILE: {self.config_file}")
+    
+    def _load_config(self) -> None:
+        """Load configuration from file with error handling."""
+        try:
+            self.read(str(self.config_file), encoding='utf-8')
+        except Exception as e:
+            if _debug_enabled():
+                print(f"Error loading config: {e}")
+    
+    def _save_config(self) -> None:
+        """Save current configuration to file."""
+        try:
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                self.write(f)
+        except Exception as e:
+            if _debug_enabled():
+                print(f"Error saving config: {e}")
+    
+    @property
+    def filename(self) -> str:
+        """Get absolute path of config file."""
+        return str(self.config_file)
+    
+    def set_config_file(self, config_file: str) -> None:
+        """Change the configuration file and reload."""
+        if config_file and Path(config_file).exists():
+            self.config_file = Path(config_file).resolve()
+            self._load_config()
+        else:
+            raise FileNotFoundError(f"Config file not found: {config_file}")
+    
+    def get_config(self, section: str, option: str, 
+                  default: Any = None, auto_write: bool = None) -> Any:
+        """
+        Get configuration value with automatic type conversion.
+        
+        Args:
+            section: Configuration section name
+            option: Configuration option name  
+            default: Default value if option doesn't exist
+            auto_write: Override instance auto_write setting
+            
+        Returns:
+            Configuration value with appropriate type conversion
+        """
+        if auto_write is None:
+            auto_write = self._auto_write
+            
+        try:
+            value = self.get(section, option)
+            return self._convert_value(value)
+        except (configparser.NoSectionError, configparser.NoOptionError):
+            if auto_write and default is not None:
+                self.write_config(section, option, default)
+                return default
+            return default
+    
+    def write_config(self, section: str, option: str, value: Any = '') -> Any:
+        """
+        Write configuration value to file.
+        
+        Args:
+            section: Configuration section name
+            option: Configuration option name
+            value: Value to write
+            
+        Returns:
+            The written value
+        """
+        if not self.has_section(section):
+            self.add_section(section)
+            
+        # Convert value to string for storage
+        str_value = str(value) if value is not None else ''
+        self.set(section, option, str_value)
+        self._save_config()
+        
+        return self.get_config(section, option)
+    
+    def remove_config(self, section: str, option: str = None) -> bool:
+        """
+        Remove configuration section or specific option.
+        
+        Args:
+            section: Configuration section name
+            option: Configuration option name (optional)
+                   If None, removes entire section
+                   If specified, removes only that option from section
+                   
+        Returns:
+            True if successfully removed, False if section/option not found
+        """
+        try:
+            if option is None:
+                # Remove entire section
+                if self.has_section(section):
+                    self.remove_section(section)
+                    self._save_config()
+                    if _debug_enabled():
+                        print(f"Removed section: [{section}]")
+                    return True
+                else:
+                    if _debug_enabled():
+                        print(f"Section not found: [{section}]")
+                    return False
+            else:
+                # Remove specific option from section
+                if self.has_section(section):
+                    if self.has_option(section, option):
+                        self.remove_option(section, option)
+                        self._save_config()
+                        if _debug_enabled():
+                            print(f"Removed option: [{section}] {option}")
+                        return True
+                    else:
+                        if _debug_enabled():
+                            print(f"Option not found: [{section}] {option}")
+                        return False
+                else:
+                    if _debug_enabled():
+                        print(f"Section not found: [{section}]")
+                    return False
+        except Exception as e:
+            if _debug_enabled():
+                print(f"Error removing config: {e}")
+            return False
+
+    def remove_section(self, section: str) -> bool:
+        return self.remove_config(section)
+    
+    def get_config_as_list(self, section: str, option: str, 
+                          default: Union[str, List] = None) -> List[Any]:
+        """
+        Get configuration value as a list, parsing various formats.
+        
+        Supports formats:
+        - Comma-separated: item1, item2, item3
+        - Newline-separated: item1\nitem2\nitem3
+        - JSON arrays: ["item1", "item2", "item3"]
+        - Mixed formats with type conversion
+        
+        Args:
+            section: Configuration section name
+            option: Configuration option name
+            default: Default value if option doesn't exist
+            
+        Returns:
+            List of parsed values with type conversion
+        """
+        if default is None:
+            default = []
+        elif isinstance(default, str):
+            default = [default]
+            
+        raw_value = self.get_config(section, option, str(default), auto_write=False)
+        if not raw_value:
+            return default
+            
+        # Handle string representation of lists
+        if isinstance(raw_value, str):
+            # Try to parse as JSON first
+            if raw_value.strip().startswith('[') and raw_value.strip().endswith(']'):
+                try:
+                    return json.loads(raw_value)
+                except json.JSONDecodeError:
+                    pass
+            
+            # Split by common delimiters
+            items = re.split(r'\n|,\s*|\s+', raw_value)
+            items = [item.strip() for item in items if item.strip()]
+            
+            # Convert types for each item
+            result = []
+            for item in items:
+                # Handle quoted strings
+                if (item.startswith('"') and item.endswith('"')) or \
+                   (item.startswith("'") and item.endswith("'")):
+                    result.append(item[1:-1])
+                else:
+                    result.append(self._convert_value(item))
+            
+            return result
+        
+        return default if isinstance(default, list) else [default]
+    
+    def get_config_as_dict(self, section: str, option: str, 
+                          default: Dict = None) -> Dict[str, Any]:
+        """
+        Get configuration value as dictionary, parsing key:value pairs.
+        
+        Supports formats:
+        - key1:value1, key2:value2
+        - JSON objects: {"key1": "value1", "key2": "value2"}
+        
+        Args:
+            section: Configuration section name
+            option: Configuration option name
+            default: Default dictionary if option doesn't exist
+            
+        Returns:
+            Dictionary with parsed key-value pairs
+        """
+        if default is None:
+            default = {}
+            
+        raw_value = self.get_config(section, option, str(default), auto_write=False)
+        if not raw_value:
+            return default
+            
+        if isinstance(raw_value, str):
+            # Try JSON first
+            if raw_value.strip().startswith('{') and raw_value.strip().endswith('}'):
+                try:
+                    return json.loads(raw_value)
+                except json.JSONDecodeError:
+                    pass
+            
+            # Parse key:value pairs
+            result = {}
+            pairs = re.split(r',\s*', raw_value)
+            
+            for pair in pairs:
+                if ':' in pair:
+                    key, value = pair.split(':', 1)
+                    key = key.strip()
+                    value = value.strip()
+                    result[key] = self._convert_value(value)
+            
+            return result
+        
+        return default
+    
+    def find(self, query: str, case_sensitive: bool = True, 
+             verbose: bool = False) -> bool:
+        """
+        Search for sections or options matching the query.
+        
+        Args:
+            query: Search term
+            case_sensitive: Whether to perform case-sensitive search
+            verbose: Print found items
+            
+        Returns:
+            True if any matches found, False otherwise
+        """
+        if not query:
+            return False
+            
+        found = []
+        search_query = query if case_sensitive else query.lower()
+        
+        for section_name in self.sections():
+            section_match = section_name if case_sensitive else section_name.lower()
+            
+            # Check section name match
+            if search_query == section_match:
+                found.append(('section', section_name))
+                if verbose:
+                    self._print_colored(f"[{section_name}]", 'section')
+            
+            # Check options in section
+            try:
+                for option in self.options(section_name):
+                    option_match = option if case_sensitive else option.lower()
+                    if search_query == option_match:
+                        found.append((section_name, option))
+                        if verbose:
+                            value = self.get(section_name, option)
+                            self._print_colored(f"[{section_name}]", 'section')
+                            self._print_colored(f"  {option} = {value}", 'option', value)
+            except Exception:
+                if _debug_enabled():
+                    print(f"Error searching section {section_name}: {traceback.format_exc()}")
+        
+        return len(found) > 0
+    
+    def get_all_config(self, sections: List[str] = None) -> List[Tuple[str, Dict]]:
+        """
+        Get all configuration data, optionally filtered by sections.
+        
+        Args:
+            sections: List of section names to include (None for all)
+            
+        Returns:
+            List of (section_name, options_dict) tuples
+        """
+        result = []
+        target_sections = sections or self.sections()
+        
+        for section_name in target_sections:
+            if not self.has_section(section_name):
+                continue
+                
+            section_data = {}
+            for option in self.options(section_name):
+                section_data[option] = self.get_config(section_name, option)
+            
+            result.append((section_name, section_data))
+        
+        return result
+    
+    def print_all_config(self, sections: List[str] = None) -> List[Tuple[str, Dict]]:
+        """Print all configuration in a formatted way."""
+        print(f"CONFIG FILE: {self.config_file}")
+        
+        data = self.get_all_config(sections)
+        
+        for section_name, section_data in data:
+            self._print_colored(f"[{section_name}]", 'section')
+            for option, value in section_data.items():
+                self._print_colored(f"  {option} = {value}", 'option', value)
+        
+        print()  # Empty line at the end
+        
+        # Pretty print JSON if available
+        if HAS_RICH:
+            print_json(data=data)
+        elif HAS_JSONCOLOR:
+            jprint(data)
+        
+        return data
+    
+    def _convert_value(self, value: str) -> Any:
+        """Convert string value to appropriate Python type."""
+        if not isinstance(value, str):
+            return value
+            
+        value = value.strip()
+        
+        # Boolean conversion
+        if value.lower() in ('true', 'yes', '1'):
+            return True
+        elif value.lower() in ('false', 'no', '0'):
+            return False
+        
+        # Numeric conversion
+        if value.isdigit():
+            return int(value)
+        
+        # Try float conversion
+        try:
+            if '.' in value:
+                return float(value)
+        except ValueError:
+            pass
+        
+        # Return as string
+        return value
+    
+    def _print_colored(self, text: str, element_type: str, value: str = None) -> None:
+        """Print text with colors if available."""
+        if element_type == 'section':
+            if HAS_RICH:
+                _console.print(f"[bold cyan]{text}[/]")
+            elif HAS_MAKECOLOR:
+                print(make_colors(text, 'lc'))
+            else:
+                print(text)
+        elif element_type == 'option':
+            if HAS_RICH:
+                _console.print(f"[yellow]{text}[/]")
+            elif HAS_MAKECOLOR:
+                print(make_colors(text, 'ly'))
+            else:
+                print(text)
+        else:
+            print(text)
+
+class configset(ConfigSet):
+    pass
+
+class ConfigMeta(type):
+    """Metaclass for creating class-based configuration interfaces."""
+    
     def __new__(mcs, name, bases, attrs):
-        # print(f"mcs: {mcs} --> type: {type(mcs)}")
-        # print(f"name: {name} --> type: {type(name)}")
-        # print(f"bases: {bases} --> type: {type(bases)}")
-        # print(f"attrs: {attrs} --> type: {type(attrs)}")
-        # Buat instance internal untuk configset
-        # config_file = str(Path.cwd() / 'debug.ini') if (Path.cwd() / 'debug.ini').is_file() else str(Path(__file__).parent / "debug.ini")
-        if is_debug_enabled():
-            print(f"attrs.get('CONFIGFILE'): {attrs.get('CONFIGFILE')}")
-            print(f"attrs.get('config'): {attrs.get('config')} --> type: {type(attrs.get('config'))}")
-        if attrs.get('config'):
-            attrs['_config_instance'] = attrs.get('config')
-            if is_debug_enabled():
-                print(f"attrs['_config_instance']: {attrs['_config_instance']} --> type: {type(attrs['_config_instance'])}")
-            attrs['_config_instance'].set_configfile(attrs.get('CONFIGFILE'))
-            if is_debug_enabled():
-                print("dir(attrs['_config_instance']):")
-                print(dir(attrs['_config_instance']))
-        else:    
-            attrs['_config_instance'] = configset(attrs.get('CONFIGFILE'))
-        # attrs['_config_instance'] = attrs.get('configset')
-
-
-        # Fungsi pembungkus untuk mengubah method menjadi classmethod
+        # Initialize config instance
+        config_file = attrs.get('CONFIGFILE') or attrs.get('configname')
+        
+        if 'config' in attrs and hasattr(attrs['config'], 'set_config_file'):
+            config_instance = attrs['config']
+            if config_file:
+                config_instance.set_config_file(config_file)
+        else:
+            config_instance = ConfigSet(config_file)
+        
+        attrs['_config_instance'] = config_instance
+        
+        # Wrap methods to work as classmethods
         def make_classmethod(method):
             @wraps(method)
-            def classmethod_wrapper(cls, *args, **kwargs):
-                # Panggil method pada instance internal
+            def wrapper(cls, *args, **kwargs):
                 return method(cls._config_instance, *args, **kwargs)
-            return classmethod(classmethod_wrapper)
-
-        # Ambil semua method dari base class dan attrs, lalu jadikan classmethod
+            return classmethod(wrapper)
+        
+        # Convert ConfigSet methods to classmethods
         for base in bases:
             for attr_name, attr_value in base.__dict__.items():
-                if callable(attr_value) and not attr_name.startswith('__'):
+                if (callable(attr_value) and 
+                    not attr_name.startswith('__') and 
+                    attr_name not in attrs):
                     attrs[attr_name] = make_classmethod(attr_value)
-        for attr_name, attr_value in attrs.copy().items():
-            if callable(attr_value) and not attr_name.startswith('__'):
-                attrs[attr_name] = make_classmethod(attr_value)
-
+        
         return super().__new__(mcs, name, bases, attrs)
     
-    def __getattr__(cls, name, **kwargs):
-        # Ambil dari instance internal
-        # print(f"cls._config_instance: {cls._config_instance} --> type: {type(cls._config_instance)}")
-        if is_debug_enabled():
-            print(f"ClassConfigMeta --> __getattr__ --> name: {name} --> type: {type(name)}")
-            print(f"ClassConfigMeta --> __getattr__ --> kwargs: {kwargs} --> type: {type(kwargs)}")
-
+    def __getattr__(cls, name):
+        """Delegate attribute access to config instance."""
         if hasattr(cls._config_instance, name):
-            return getattr(cls._config_instance, name)
-        # Cek di _data jika ada
-        # if hasattr(cls._config_instance, '_data') and name in cls._config_instance._data:
+            attr = getattr(cls._config_instance, name)
+            if callable(attr):
+                return lambda *args, **kwargs: attr(*args, **kwargs)
+            return attr
+        
         if hasattr(cls, 'data') and name in cls.data:
             return cls.data[name]
-        raise AttributeError(f"type object '{cls.__name__}' has no attribute '{name}'")
-
+            
+        raise AttributeError(f"'{cls.__name__}' has no attribute '{name}'")
+    
     def __setattr__(cls, name, value):
-        if is_debug_enabled():
-            print(f"ClassConfigMeta --> __setattr__ --> name: {name} --> type: {type(name)}")
-            print(f"ClassConfigMeta --> __setattr__ --> value: {value} --> type: {type(value)}")
-        # Set ke instance internal jika ada di _data
+        """Handle attribute assignment."""
         if name in ['configname', 'CONFIGNAME', 'CONFIGFILE']:
-            if is_debug_enabled():
-                print(f"ClassConfigMeta --> __setattr__ --> cls._config_instance: {cls._config_instance} --> type: {type(cls._config_instance)}")
-            cls._config_instance.set_configfile(value)
-        
-        elif hasattr(cls, '_config_instance') and hasattr(cls._config_instance, 'data') and name in cls._config_instance.data:
-            cls._config_instance.data[name] = value
-            # Simpan ke file jika perlu
-            if hasattr(cls._config_instance, '_config_file'):
-                with open(cls._config_instance._config_file, "w") as f:
-                    json.dump(cls._config_instance._data, f, indent=4)
+            cls._config_instance.set_config_file(value)
         else:
             super().__setattr__(name, value)
 
-class CONFIG(metaclass=ClassConfigMeta):
-    INDENT = 4
-    configname = None
-    CONFIGNAME = configname
-    CONFIGFILE = CONFIGNAME
+
+class CONFIG(metaclass=ConfigMeta):
+    """
+    Class-based configuration interface providing both INI and JSON support.
     
-    config = configset(CONFIGNAME)
-    config_json = None
-    if is_debug_enabled():
-        print(f"CONFIG --> CONFIGNAME: {CONFIGNAME} --> type: {type(CONFIGNAME) if CONFIGNAME else None} --> is_file: {Path(CONFIGNAME).is_file() if CONFIGNAME else None}")
-    if CONFIGNAME:
-        config_json = str(Path(CONFIGFNAME).stem) + ".json"
-        if is_debug_enabled():
-            print(f"CONFIG --> CONFIGNAME: {config_json} --> type: {type(config_json) if config_json else None} --> is_file: {Path(config_json).is_file() if config_json else None}")
-        if not Path(CONFIGNAME).is_file():
-            open(CONFIGNAME, 'w').close()
-        else:
-            if not Path(config_json).is_file():
-                open(config_json, 'w').close()
-
-    data = {'test1':'TEST1'}
-
-    def __init__(self):
-        # Load existing configuration if the file exists
-        if self.config_json and os.path.isfile(self.config_json):
+    Usage:
+        # Class-level access
+        CONFIG.write_config('section', 'option', 'value')
+        value = CONFIG.get_config('section', 'option')
+        
+        # Instance-level access for JSON-like interface
+        config = CONFIG()
+        config.my_setting = 'value'
+        print(config.my_setting)
+    """
+    
+    CONFIGFILE: Optional[str] = None
+    INDENT: int = 4
+    
+    config = ConfigSet()
+    data: Dict[str, Any] = {}
+    
+    def __init__(self, config_file: str = None):
+        """Initialize CONFIG instance with optional JSON file support."""
+        if config_file:
+            self.config = ConfigSet(config_file)
+        
+        # Setup JSON file for attribute-based access
+        if self.CONFIGFILE:
+            json_file = Path(self.CONFIGFILE).with_suffix('.json')
+            self._json_file = json_file
+            
+            # Load existing JSON data
+            if json_file.exists():
+                try:
+                    with open(json_file, 'r', encoding='utf-8') as f:
+                        self.data = json.load(f)
+                except (json.JSONDecodeError, IOError) as e:
+                    if _debug_enabled():
+                        print(f"Error loading JSON config: {e}")
+                    self.data = {}
+            else:
+                # Create empty JSON file
+                self._save_json()
+    
+    def _save_json(self) -> None:
+        """Save current data to JSON file."""
+        if hasattr(self, '_json_file'):
             try:
-                with open(self.config_json, "r") as f:
-                    self.data = json.load(f)
-            except Exception as e:
-                print(f"config_json: `{config_json}` is not valid json file !")
-
-    def __getattr__(self, name):
-        if is_debug_enabled():
-            print(f"CONFIG --> __getattr__ --> name: {name} --> type: {type(name)}")
-        # Retrieve a value from the configuration data
+                with open(self._json_file, 'w', encoding='utf-8') as f:
+                    json.dump(self.data, f, indent=self.INDENT, ensure_ascii=False)
+            except IOError as e:
+                if _debug_enabled():
+                    print(f"Error saving JSON config: {e}")
+    
+    def __getattr__(self, name: str) -> Any:
+        """Get attribute from JSON data."""
         if name in self.data:
             return self.data[name]
-        elif self._config_file.exists() and not name in self.data:
-            self.__setattr__(name, '')
-            return self.data[name]
-        elif name in ['configname', 'CONFIGNAME', 'CONFIGFILE']:
-            return config.filename()
-            
-        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-
-    # @classmethod
-    # def get_config(cls, section, option):
-    #     return cls.config.get_config(section, option)
+        elif hasattr(self, '_json_file') and name not in self.data:
+            # Auto-create empty value
+            self.data[name] = ''
+            self._save_json()
+            return ''
+        
+        raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{name}'")
     
-    # @classmethod
-    # def write_config(cls, section, option):
-    #     return cls.config.write_config(section, option)
-
-    # @classmethod
-    # def set(cls, key, value):
-    #     key = str(key).upper()  
-    #     cls.console.print(f"[bold #FFFF00]Write/Set config[/] [bold #00FFFF]{key}[/] [bold #FFAAFF]-->[/] [bold ##00AAFF]{value if value else ''}[/]")
-    #     if str(value).isdigit(): value = int(value)
-    #     return CONFIG().__setattr__(key, value)
-    
-    def __setattr__(self, name, value):
-        if is_debug_enabled():
-            print(f"CONFIG --> __setattr__ --> name: {name} --> type: {type(name)}")
-            print(f"CONFIG --> __setattr__ --> value: {value} --> type: {type(value)}")
-        if name in {"_config_file", "data"}:  # Allow setting internal attributes
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Set attribute in JSON data."""
+        if name.startswith('_') or name in ['data', 'config', 'CONFIGFILE', 'INDENT']:
             super().__setattr__(name, value)
-        elif name in ['configname', 'CONFIGNAME', 'CONFIGFILE']:
-            config = configset(value)
         else:
-            # Update the configuration data and save to the file
             self.data[name] = value
-            with open(self._config_file, "w") as f:
-                json.dump(self.data, f, indent=self.INDENT)
+            if hasattr(self, '_json_file'):
+                self._save_json()
+
+
+def create_argument_parser() -> argparse.ArgumentParser:
+    """Create command-line argument parser for the configuration tool."""
+    parser = argparse.ArgumentParser(
+        description="Configuration file management tool",
+        formatter_class=CustomRichHelpFormatter,
+        prog='configset'
+    )
+    
+    parser.add_argument('config_file', 
+                       help='Configuration file path')
+    parser.add_argument('-r', '--read',
+                       action='store_true',
+                       help='Read configuration values')
+    parser.add_argument('-w', '--write',
+                       action='store_true', 
+                       help='Write configuration values')
+    parser.add_argument('-d', '--delete', '--remove',
+                       action='store_true',
+                       help='Remove configuration section or option')
+    parser.add_argument('-s', '--section',
+                       help='Configuration section name')
+    parser.add_argument('-o', '--option',
+                       help='Configuration option name')
+    parser.add_argument('-v', '--value',
+                       help='Value to write (for write operations)')
+    parser.add_argument('--list',
+                       action='store_true',
+                       help='Parse value as list')
+    parser.add_argument('--dict',
+                       action='store_true', 
+                       help='Parse value as dictionary')
+    parser.add_argument('--all',
+                       action='store_true',
+                       help='Show all configuration')
+    
+    return parser
+
+
+def main():
+    """Main CLI interface function."""
+    parser = create_argument_parser()
+    
+    if len(sys.argv) == 1:
+        parser.print_help()
+        return
+    
+    args = parser.parse_args()
+    
+    if not args.config_file:
+        print("Error: Configuration file is required")
+        parser.print_help()
+        return
+    
+    try:
+        config = ConfigSet(args.config_file)
+        
+        if args.all:
+            config.print_all_config()
+        elif args.read:
+            if not (args.section and args.option):
+                print("Error: Section and option required for read operation")
+                return
+            
+            if args.list:
+                value = config.get_config_as_list(args.section, args.option)
+            elif args.dict:
+                value = config.get_config_as_dict(args.section, args.option)
+            else:
+                value = config.get_config(args.section, args.option)
+            
+            print(f"[{args.section}] {args.option} = {value}")
+            
+        elif args.write:
+            if not (args.section and args.option):
+                print("Error: Section and option required for write operation")
+                return
+            
+            value = args.value or ''
+            result = config.write_config(args.section, args.option, value)
+            print(f"Written: [{args.section}] {args.option} = {result}")
+            
+        elif args.delete:
+            if not args.section:
+                print("Error: Section required for delete operation")
+                return
+            
+            if args.option:
+                # Remove specific option
+                success = config.remove_config(args.section, args.option)
+                if success:
+                    print(f"Removed: [{args.section}] {args.option}")
+                else:
+                    print(f"Not found: [{args.section}] {args.option}")
+            else:
+                # Remove entire section
+                success = config.remove_config(args.section)
+                if success:
+                    print(f"Removed section: [{args.section}]")
+                else:
+                    print(f"Section not found: [{args.section}]")
+            
+        else:
+            print("Error: Specify --read, --write, --delete, or --all")
+            parser.print_help()
+            
+    except Exception as e:
+        print(f"Error: {e}")
+        if _debug_enabled():
+            traceback.print_exc()
+
 
 if __name__ == '__main__':
-    from pydebugger.debug import debug
-    usage()
+    main()

@@ -1,0 +1,122 @@
+version: 1.56
+
+## Key Improvements:
+
+### 1. **Code Quality & Structure**
+- Added proper type hints throughout
+- Improved error handling with try-catch blocks
+- Better documentation with docstrings
+- Cleaner, more Pythonic code structure
+- Removed redundant and duplicate methods
+
+### 2. **Enhanced Functionality**
+- **Automatic Type Conversion**: Strings are automatically converted to appropriate types (bool, int, float)
+- **Flexible List Parsing**: Supports comma-separated, newline-separated, and JSON array formats
+- **Dictionary Parsing**: Parse key:value pairs or JSON objects
+- **Path Handling**: Uses `pathlib.Path` for robust file path operations
+- **Better Search**: Improved find functionality with case sensitivity options
+
+### 3. **Fixed Major Issues**
+- **Fixed metaclass implementation**: The original had several bugs in the metaclass
+- **Resolved circular imports**: Cleaned up import structure  
+- **Fixed file handling**: Proper encoding and error handling for file operations
+- **Corrected variable references**: Fixed undefined variables like `CONFIGFNAME`
+- **Memory efficiency**: Removed redundant storage and processing
+
+### 4. **Better CLI Interface**
+- Complete rewrite of command-line interface
+- Support for list and dictionary parsing from CLI
+- Better argument validation and error messages
+- Help system improvements
+
+### 5. **Compatibility & Dependencies**
+- Maintains Python 2/3 compatibility where needed
+- Graceful handling of optional dependencies (rich, jsoncolor, make_colors)
+- Better environment variable handling
+
+### 6. **New Features**
+- **JSON Support**: The CONFIG class now supports JSON file storage alongside INI
+- **Pretty Printing**: Enhanced output formatting with optional color support
+- **Flexible Configuration**: Support for both class-based and instance-based usage
+- **Auto-creation**: Automatic file and section creation when needed
+
+## Usage Examples:
+
+```python
+# Basic usage
+config = ConfigSet('myapp.ini')
+config.write_config('database', 'host', 'localhost')
+host = config.get_config('database', 'host')
+
+# List parsing
+servers = config.get_config_as_list('cluster', 'servers')
+
+# Dictionary parsing  
+settings = config.get_config_as_dict('app', 'features')
+
+# Class-based interface
+class MyConfig(CONFIG):
+    CONFIGFILE = 'myapp.ini'
+
+# Use as class methods
+MyConfig.write_config('section', 'option', 'value')
+
+# JSON-style attribute access
+config = MyConfig()
+config.api_key = 'secret123'
+print(config.api_key)
+```
+
+The rewritten library is now much more maintainable, reliable, and feature-rich while maintaining backward compatibility with the core functionality.
+
+add method `remove_config`.
+
+```python
+def remove_config(self, section: str, option: str = None) -> bool:
+    """
+    Remove configuration section or specific option.
+    
+    Args:
+        section: Configuration section name
+        option: Configuration option name (optional)
+               If None, removes entire section
+               If specified, removes only that option from section
+               
+    Returns:
+        True if successfully removed, False if section/option not found
+    """
+```
+
+**How `remove_config` works:**
+1. **If only `section`** (tanpa `option`): Delete the entire section and all the options in it
+2. **If there are `section` and `option`**: Delete only certain options in the section
+3. **Return value**: `True` If successfully deleted, `False` If section/option is not found
+
+## Examples of use:
+
+```python
+config = ConfigSet('myapp.ini')
+
+# Delete the entire section [database]
+config.remove_config('database')
+
+# Delete only the 'Password' option from section [database]
+config.remove_config('database', 'password')
+```
+
+## Cli usage that has been added:
+
+```bash
+# Delete the whole section
+python configset.py myapp.ini --delete --section database
+
+# Delete certain options
+python configset.py myapp.ini --delete --section database --option password
+```
+
+## Other things to note:
+
+1. **Safety**: This method immediately keeps changes to the file after removing
+2. **Debug Mode**: If the 'DEBUG' Environment variable is set, it will display the debug message
+3. **Error Handling**: Method handling Exception and provides a clear return value
+4. **Backwards Compatible**: This method does not change existing functionality
