@@ -632,4 +632,4 @@ Made with ❤️ by developers, for developers.
 
 [Support me on Patreon](https://www.patreon.com/cumulus13)
 
-[Medium](https://www.medium.com/@cumulus13)
+[Medium](https://medium.com/@cumulus13/configset-a-powerful-python-configuration-management-library-that-actually-makes-sense-67bd622d059f)
