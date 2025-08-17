@@ -196,6 +196,9 @@ class ConfigSet(configparser.RawConfigParser):
                 self.write_config(section, option, default)
                 return default
             return default
+
+    def read_config(self, *args, **kwargs):
+        return get_config(*args, **kwargs)
     
     def write_config(self, section: str, option: str, value: Any = '') -> Any:
         """
