@@ -113,11 +113,13 @@ def get_extras_require():
         'full': [
             'rich>=10.0.0',
             'jsoncolor>=0.2.0', 
-            'make-colors>=1.0.0'
+            'make-colors>=1.0.0',
+            'licface'
         ],
         'colors': [
             'rich>=10.0.0',
-            'make-colors>=1.0.0'
+            'make-colors>=1.0.0',
+            'licface'
         ],
         'json': [
             'jsoncolor>=0.2.0'
