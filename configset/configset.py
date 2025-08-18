@@ -203,6 +203,10 @@ class ConfigSet(configparser.RawConfigParser):
             if auto_write and default is not None:
                 self.write_config(section, option, default)
                 return default
+            elif auto_write and default is None:
+                # If no default is provided, write an empty value
+                self.write_config(section, option, '')
+                return ''
             return default
         
     def get(self, section: str, option: str, 
