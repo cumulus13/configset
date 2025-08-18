@@ -104,7 +104,7 @@ class ConfigSet(configparser.RawConfigParser):
     file creation, type conversion, and various data parsing methods.
     """
     
-    def __init__(self, config_file: str = '', auto_write: bool = True, **kwargs):
+    def __init__(self, config_file: str = '', auto_write: bool = True, config_dir: str = '', config_name: str = '', **kwargs):
         """
         Initialize ConfigSet instance.
         
@@ -129,18 +129,26 @@ class ConfigSet(configparser.RawConfigParser):
             config_file += '.ini'
             
         self.config_file = Path(config_file).resolve()
+        self.config_name = Path(config_name).resolve() if config_name else self.config_file
         self._auto_write = auto_write
         
         # Create file if it doesn't exist and auto_write is enabled
         if not self.config_file.exists() and auto_write:
             self.config_file.touch()
-            
+        
+        if config_dir:
+            # Ensure config directory exists
+            config_dir_path = Path(config_dir).resolve()
+            if not config_dir_path.exists():
+                config_dir_path.mkdir(parents=True, exist_ok=True)
+            self.config_file = config_dir_path / self.config_name.name  
+                
         # Load existing configuration
         if self.config_file.exists():
             self._load_config()
             if os.getenv('SHOW_CONFIGNAME'):
                 print(f"CONFIG FILE: {self.config_file}")
-    
+        
     def _load_config(self) -> None:
         """Load configuration from file with error handling."""
         try:
@@ -172,7 +180,7 @@ class ConfigSet(configparser.RawConfigParser):
             raise FileNotFoundError(f"Config file not found: {config_file}")
     
     def get_config(self, section: str, option: str, 
-                  default: Any = None, auto_write: bool = None) -> Any:
+                  default: Any = None, auto_write: bool = False) -> Any:
         """
         Get configuration value with automatic type conversion.
         
@@ -180,7 +188,7 @@ class ConfigSet(configparser.RawConfigParser):
             section: Configuration section name
             option: Configuration option name  
             default: Default value if option doesn't exist
-            auto_write: Override instance auto_write setting
+            auto_write: Override instance auto_write setting, default `False`
             
         Returns:
             Configuration value with appropriate type conversion
@@ -189,13 +197,29 @@ class ConfigSet(configparser.RawConfigParser):
             auto_write = self._auto_write
             
         try:
-            value = self.get(section, option)
+            value = super().get(section, option)
             return self._convert_value(value)
         except (configparser.NoSectionError, configparser.NoOptionError):
             if auto_write and default is not None:
                 self.write_config(section, option, default)
                 return default
             return default
+        
+    def get(self, section: str, option: str, 
+             default: Any = None, auto_write: bool = True) -> Any:
+        """
+        Alias for get_config to maintain compatibility with previous versions.
+        
+        Args:
+            section: Configuration section name
+            option: Configuration option name
+            default: Default value if option doesn't exist
+            auto_write: Override instance auto_write setting, default `True`
+            
+        Returns:
+            Configuration value with appropriate type conversion
+        """
+        return self.get_config(section, option, default, auto_write)
 
     def read_config(self, *args, **kwargs):
         return self.get_config(*args, **kwargs)
@@ -217,10 +241,32 @@ class ConfigSet(configparser.RawConfigParser):
             
         # Convert value to string for storage
         str_value = str(value) if value is not None else ''
-        self.set(section, option, str_value)
+        # super().set(section, option, str_value)
+        try:
+            super().set(section, option, str_value)
+        except configparser.NoSectionError:
+            super().add_section(section)
+            super().set(section, option, str_value)
+        except configparser.NoOptionError:
+            super().set(section, option, str_value)
+
         self._save_config()
         
         return self.get_config(section, option)
+    
+    def set(self, section: str, option: str, value: Any = '') -> Any:
+        """
+        Alias for write_config to maintain compatibility with previous versions.
+        
+        Args:
+            section: Configuration section name
+            option: Configuration option name
+            value: Value to write
+            
+        Returns:
+            The written value
+        """
+        return self.write_config(section, option, value)
     
     def remove_config(self, section: str, option: str = None) -> bool:
         """
@@ -410,7 +456,7 @@ class ConfigSet(configparser.RawConfigParser):
                     if search_query == option_match:
                         found.append((section_name, option))
                         if verbose:
-                            value = self.get(section_name, option)
+                            value = super().get(section_name, option)
                             self._print_colored(f"[{section_name}]", 'section')
                             self._print_colored(f"  {option} = {value}", 'option', value)
             except Exception:
