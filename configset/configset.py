@@ -285,11 +285,12 @@ class ConfigSet(configparser.RawConfigParser):
         Returns:
             True if successfully removed, False if section/option not found
         """
+        # print(f"section: {section}, option: {option}")
         try:
             if option is None:
                 # Remove entire section
                 if self.has_section(section):
-                    self.remove_section(section)
+                    super().remove_section(section)
                     self._save_config()
                     if _debug_enabled():
                         print(f"Removed section: [{section}]")
@@ -302,7 +303,7 @@ class ConfigSet(configparser.RawConfigParser):
                 # Remove specific option from section
                 if self.has_section(section):
                     if self.has_option(section, option):
-                        self.remove_option(section, option)
+                        super().remove_option(section, option)
                         self._save_config()
                         if _debug_enabled():
                             print(f"Removed option: [{section}] {option}")
