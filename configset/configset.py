@@ -26,6 +26,8 @@ if sys.version_info.major == 2:
     configparser = ConfigParser
 else:
     import configparser
+    
+from dataclasses import dataclass
 
 # Optional dependencies for enhanced output
 HAS_RICH = False
@@ -39,7 +41,37 @@ try:
     _console = Console()
     HAS_RICH = True
 except ImportError:
+    # Regex untuk tag [bold], [/bold], [/#], [/], dll
+    TAG_PATTERN = re.compile(r"\[(\/?[a-zA-Z0-9#=_\- ]*?)\]")
+    # Regex untuk emoji-style :smile:, :rocket:, dll
+    EMOJI_PATTERN = re.compile(r":[a-zA-Z0-9_+\-]+:")
+
+    @dataclass
+    class _console:
+        @staticmethod
+        def print(*args, **kwargs):
+            cleaned = []
+            for arg in args:
+                if isinstance(arg, str):
+                    arg = TAG_PATTERN.sub("", arg)     # hapus markup [..]
+                    arg = EMOJI_PATTERN.sub("", arg)   # hapus emoji :..:
+                cleaned.append(arg)
+            print(*cleaned, **kwargs)
+
+    def print_json(*args, **kwargs):
+        import json
+        print(json.dumps(args[0], indent=2) if args else "")
+
+    class rich_traceback:
+        @staticmethod
+        def install(*args, **kwargs):
+            import traceback, sys
+            def excepthook(exc_type, exc_value, tb):
+                traceback.print_exception(exc_type, exc_value, tb)
+            sys.excepthook = excepthook
+
     HAS_RICH = False
+    
     try:
         from jsoncolor import jprint
         HAS_JSONCOLOR = True
@@ -76,16 +108,16 @@ def get_version():
                             return parts[1].strip().strip('"').strip("'")
     except Exception as e:
         if os.getenv('TRACEBACK') and os.getenv('TRACEBACK') in ['1', 'true', 'True']:
-            print(traceback.format_exc())
+            _console.print(f":biohazard_sign {traceback.format_exc()}")
         else:
-            print(f"ERROR: {e}")
+            _console.print(f":cross_mark: [white on red]ERROR:[/] [white on blue]{e}[/]")
 
     return "0.0.0"
 
 __version__ = get_version()
 __platform__ = "all"
 __contact__ = "licface@yahoo.com"
-__all__ = ["ConfigSet", "CONFIG", "MultiOrderedDict"]
+__all__ = ["ConfigSet", "CONFIG", "MultiOrderedDict", "__version__", "get_version"]
 
 
 def _debug_enabled() -> bool:
@@ -93,8 +125,7 @@ def _debug_enabled() -> bool:
     return (os.getenv('DEBUG', '').lower() in ['1', 'true', 'yes'] or
             os.getenv('DEBUG_SERVER', '').lower() in ['1', 'true', 'yes'])
 
-
-def detect_file_type(content: str) -> str:
+def detect_file_type(content: str) -> Any:
     """
     Detect the file type based on content or file extension.
     
@@ -149,7 +180,6 @@ def detect_file_type(content: str) -> str:
 
     return False
 
-
 class MultiOrderedDict(OrderedDict):
     """OrderedDict that extends lists when duplicate keys are encountered."""
     
@@ -159,7 +189,6 @@ class MultiOrderedDict(OrderedDict):
             self[key].extend(value)
         else:
             super().__setitem__(key, value)
-
 
 class ConfigSetJson(JSONDecoder, JSONEncoder):
     """Enhanced configuration file manager supporting JSON format."""
@@ -214,12 +243,15 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                 self.json = json.loads(source)
         except Exception as e:
             if _debug_enabled():
-                print(f"Error loading JSON config: {e}")
+                _console.print(f":cross_mark: [white on red]Error loading JSON config:[/] [white on blue]{e}[/]")
             self.json = {}
         return self.json
     
     def loads(self, json_file=None):
         """Alias for _load_config."""
+        return self._load_config(json_file)
+    
+    def read(self, json_file=None):
         return self._load_config(json_file)
 
     def _save_config(self, json_file=None) -> None:
@@ -233,7 +265,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
 
         except Exception as e:
             if _debug_enabled():
-                print(f"Error saving JSON config: {e}")
+                _console.print(f":cross_mark: [white on red]Error saving JSON config:[/] [white on blue]{e}[/]")
                 
     def dump(self, *args, **kwargs):
         """Dump JSON data to file."""
@@ -264,6 +296,11 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
     def filename(self):
         """Get the filename of the JSON configuration file."""
         return str(self.json_file)
+    
+    @property
+    def configname(self):
+        """Get the configuration name (alias for filename)."""
+        return self.filename
     
     def set_config_file(self, config_file: str) -> bool:
         """Set a new configuration file path."""
@@ -304,7 +341,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                     if HAS_RICH:
                         _console.print(f"\n:cross_mark: [bold #FFFF00]No key ![/]")
                     else:
-                        print("No key !")
+                        _console.print("[bold #FFFF00]No key ![/]")
                 return False
 
             d = self.json
@@ -326,7 +363,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                 if HAS_RICH:
                     _console.print(f"\n:cross_mark: [white on red]Error writing config:[/] [white on blue]{e}[/]")
                 else:
-                    print(f"Error writing config: {e}")
+                    _console.print(f":cross_mark: [white on red]Error writing config:[/] [white on blue]{e}[/]")
             return False
         
     def set(self, key, value: str = ''):
@@ -362,7 +399,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                     if HAS_RICH:
                         _console.print(f"\n:cross_mark: [bold #FFFF00]No key ![/]")
                     else:
-                        print("No key !")
+                        _console.print(":warning: [bold #FFFF00]No key ![/]")
                 return False
 
             d = self.json
@@ -375,7 +412,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                         if HAS_RICH:
                             _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{k}[/]")
                         else:
-                            print(f"Key not found: {k}")
+                            _console.print(f":warning: [bold #FFFF00]Key not found:[/] [bold #00FFFF]{k}[/]")
                     return False
 
             last_key = keys[-1]
@@ -384,7 +421,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                     if HAS_RICH:
                         _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{last_key}[/]")
                     else:
-                        print(f"Key not found: {last_key}")
+                        _console.print(f":warning: [bold #FFFF00]Key not found:[/] [bold #00FFFF]{last_key}[/]")
                 return False
 
             if value is None:
@@ -407,7 +444,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                 if HAS_RICH:
                     _console.print(f"\n:cross_mark: [white on red]Error removing config:[/] [white on blue]{e}[/]")
                 else:
-                    print(f"Error removing config: {e}")
+                    _cosnole.print(f":cross_mark: [white on red]Error removing config:[/] [white on blue]{e}[/]")
             return False
 
     def remove_key(self, key: str) -> bool:
@@ -460,10 +497,8 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
             # print(">>> JSON ROOT KEYS =", list(self.json.keys())[:10], "...")  # tampilkan sebagian saja
             if not keys:
                 if _debug_enabled():
-                    if HAS_RICH:
-                        _console.print(f"\n:cross_mark: [bold #FFFF00]No key ![/]")
-                    else:
-                        print("No key !")
+                    _console.print(f"\n:cross_mark: [bold #FFFF00]No key ![/]")
+                    
                 return {}
 
             d = self.json
@@ -473,10 +508,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                     d = d[k]
                 else:
                     if _debug_enabled():
-                        if HAS_RICH:
-                            _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{k}[/]")
-                        else:
-                            print(f"Key not found: {k}")
+                        _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{k}[/]")
                     return {}
 
             last_key = keys[-1]
@@ -490,17 +522,11 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                 return found
             else:
                 if _debug_enabled():
-                    if HAS_RICH:
-                        _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{last_key}[/]")
-                    else:
-                        print(f"Key not found: {last_key}")
+                    _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{last_key}[/]")
                 return {}
         except Exception as e:
             if _debug_enabled():
-                if HAS_RICH:
-                    _console.print(f"\n:cross_mark: [white on red]Error finding key:[/] [white on blue]{key}[/]")
-                else:
-                    print(f"Error finding key: {key}")
+                _console.print(f"\n:cross_mark: [white on red]Error finding key:[/] [white on blue]{key}[/]")
             return {}
 
 class ConfigSetYaml:
@@ -527,15 +553,14 @@ class ConfigSetYaml:
             with open(yaml_file, 'r') as f:
                 self.yaml = yaml.safe_load(f)
         else:
-            if HAS_RICH:
-                _console.print(f"\n:cross_mark: [white on red]YAML file not found:[/] [white on blue]{yaml_file}[/]")
+            _console.print(f"\n:cross_mark: [white on red]YAML file not found:[/] [white on blue]{yaml_file}[/]")
             raise FileNotFoundError(f"YAML file not found: {yaml_file}")
         return self.yaml
     
     def _load_config(self, yaml_file=None):
         """Load configuration from file with error handling."""
         source = yaml_file or self.yaml_file
-        print(f"source: {source}, is_file: {os.path.isfile(source)}")
+        # print(f"source: {source}, is_file: {os.path.isfile(source)}")
         try:
             if os.path.isfile(source):
                 with open(source, "r", encoding="utf-8") as f:
@@ -545,7 +570,7 @@ class ConfigSetYaml:
                 self.yaml = yaml.save_load(source)
         except Exception as e:
             if _debug_enabled():
-                print(f"Error loading YAML config: {e}")
+                _console.print(f":cross_mark: [white on red]Error loading YAML config:[/] [white on blue]{e}[/]")
             self.yaml = {}
         return self.yaml
     
@@ -553,6 +578,10 @@ class ConfigSetYaml:
         """Alias for _load_config."""
         return self._load_config(yaml_file)
 
+    def read(self, yaml_file=None):
+        """Alias for _load_config."""
+        return self._load_config(yaml_file)
+    
     def _save_config(self, yaml_file=None) -> None:
         """Save current configuration to file."""
         source = yaml_file or self.yaml_file
@@ -564,8 +593,8 @@ class ConfigSetYaml:
 
         except Exception as e:
             if _debug_enabled():
-                print(f"Error saving YAML config: {e}")
-                
+                _console.print(f":cross_mark: [white on red]Error saving YAML config:[/] [white on blue]{e}[/]")
+
     def dump(self, *args, **kwargs):
         """Dump YAML data to file."""
         with open(self.yaml_file, "w") as f:
@@ -595,8 +624,13 @@ class ConfigSetYaml:
     @property
     def filename(self):
         """Get the filename of the JSON configuration file."""
-        return str(self.json_file)
+        return str(self.yaml_file)
     
+    @property
+    def config_file(self):
+        """Get the current configuration file path."""
+        return str(self.yaml_file)
+
     def set_config_file(self, config_file: str) -> bool:
         """Set a new configuration file path."""
         if os.path.isfile(config_file):
@@ -613,8 +647,7 @@ class ConfigSetYaml:
         if isinstance(self.json, dict):
             return self.json.get(key, None)
         else:
-            if HAS_RICH:
-                _console.print(f"\n:cross_mark: [white on red]Invalid Json File ![/]")
+            _console.print(f"\n:cross_mark: [white on red]Invalid Json File ![/]")
             return None
     
     def get(self, key):
@@ -633,10 +666,7 @@ class ConfigSetYaml:
 
             if not keys:
                 if _debug_enabled():
-                    if HAS_RICH:
-                        _console.print(f"\n:cross_mark: [bold #FFFF00]No key ![/]")
-                    else:
-                        print("No key !")
+                    _console.print(f"\n:cross_mark: [bold #FFFF00]No key ![/]")
                 return False
 
             d = self.yaml
@@ -655,10 +685,7 @@ class ConfigSetYaml:
 
         except Exception as e:
             if _debug_enabled():
-                if HAS_RICH:
-                    _console.print(f"\n:cross_mark: [white on red]Error writing config:[/] [white on blue]{e}[/]")
-                else:
-                    print(f"Error writing config: {e}")
+                _console.print(f"\n:cross_mark: [white on red]Error writing config:[/] [white on blue]{e}[/]")
             return False
         
     def set(self, key, value: str = ''):
@@ -691,10 +718,7 @@ class ConfigSetYaml:
             keys = [i.strip() for i in keys if i.strip()]
             if not keys:
                 if _debug_enabled():
-                    if HAS_RICH:
-                        _console.print(f"\n:cross_mark: [bold #FFFF00]No key ![/]")
-                    else:
-                        print("No key !")
+                    _console.print(f"\n:cross_mark: [bold #FFFF00]No key ![/]")
                 return False
 
             d = self.json
@@ -704,19 +728,13 @@ class ConfigSetYaml:
                     d = d[k]
                 else:
                     if _debug_enabled():
-                        if HAS_RICH:
-                            _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{k}[/]")
-                        else:
-                            print(f"Key not found: {k}")
+                        _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{k}[/]")
                     return False
 
             last_key = keys[-1]
             if last_key not in d:
                 if _debug_enabled():
-                    if HAS_RICH:
-                        _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{last_key}[/]")
-                    else:
-                        print(f"Key not found: {last_key}")
+                    _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{last_key}[/]")
                 return False
 
             if value is None:
@@ -736,10 +754,7 @@ class ConfigSetYaml:
             return True
         except Exception as e:
             if _debug_enabled():
-                if HAS_RICH:
-                    _console.print(f"\n:cross_mark: [white on red]Error removing config:[/] [white on blue]{e}[/]")
-                else:
-                    print(f"Error removing config: {e}")
+                _console.print(f"\n:cross_mark: [white on red]Error removing config:[/] [white on blue]{e}[/]")
             return False
 
     def remove_key(self, key: str) -> bool:
@@ -792,10 +807,7 @@ class ConfigSetYaml:
             # print(">>> JSON ROOT KEYS =", list(self.json.keys())[:10], "...")  # tampilkan sebagian saja
             if not keys:
                 if _debug_enabled():
-                    if HAS_RICH:
-                        _console.print(f"\n:cross_mark: [bold #FFFF00]No key ![/]")
-                    else:
-                        print("No key !")
+                    _console.print(f"\n:cross_mark: [bold #FFFF00]No key ![/]")
                 return {}
 
             d = self.yaml
@@ -805,10 +817,7 @@ class ConfigSetYaml:
                     d = d[k]
                 else:
                     if _debug_enabled():
-                        if HAS_RICH:
-                            _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{k}[/]")
-                        else:
-                            print(f"Key not found: {k}")
+                        _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{k}[/]")
                     return {}
 
             last_key = keys[-1]
@@ -822,17 +831,11 @@ class ConfigSetYaml:
                 return found
             else:
                 if _debug_enabled():
-                    if HAS_RICH:
-                        _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{last_key}[/]")
-                    else:
-                        print(f"Key not found: {last_key}")
+                    _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{last_key}[/]")
                 return {}
         except Exception as e:
             if _debug_enabled():
-                if HAS_RICH:
-                    _console.print(f"\n:cross_mark: [white on red]Error finding key:[/] [white on blue]{key}[/]")
-                else:
-                    print(f"Error finding key: {key}")
+                _console.print(f"\n:cross_mark: [white on red]Error finding key:[/] [white on blue]{key}[/]")
             return {}
 
 class ConfigSetYAML(ConfigSetYaml):
@@ -903,7 +906,7 @@ class ConfigSetIni(configparser.RawConfigParser):
         if self.config_file.exists():
             self._load_config()
             if os.getenv('SHOW_CONFIGNAME'):
-                print(f"CONFIG FILE: {self.config_file}")
+                _console.print(f":japanese_symbol_for_beginner: [#FFFF00]CONFIG FILE:[/] [bold #00FFFF]{self.config_file}[/]")
         
     def _load_config(self) -> None:
         """Load configuration from file with error handling."""
@@ -911,7 +914,7 @@ class ConfigSetIni(configparser.RawConfigParser):
             self.read(str(self.config_file), encoding='utf-8')
         except Exception as e:
             if _debug_enabled():
-                print(f"Error loading config: {e}")
+                _console.print(f":cross_mark: [white on red]Error loading config:[/] [white on blue]{e}[/]")
     
     def _save_config(self) -> None:
         """Save current configuration to file."""
@@ -920,19 +923,25 @@ class ConfigSetIni(configparser.RawConfigParser):
                 self.write(f)
         except Exception as e:
             if _debug_enabled():
-                print(f"Error saving config: {e}")
+                _console.print(f":cross_mark: [white on red]Error saving config:[/] [white on blue]{e}[/]")
     
     @property
     def filename(self) -> str:
         """Get absolute path of config file."""
         return str(self.config_file)
     
+    @property
+    def config_file(self) -> str:
+        """Get absolute path of config file."""
+        return str(self.config_file)
+
     def set_config_file(self, config_file: str) -> None:
         """Change the configuration file and reload."""
         if config_file and Path(config_file).exists():
             self.config_file = Path(config_file).resolve()
             self._load_config()
         else:
+            _console.print(f":warning: [#FFFF00]Config file not found:[/] [#00FFFF]{config_file}[/]")
             raise FileNotFoundError(f"Config file not found: {config_file}")
     
     def get_config(self, section: str, option: str, 
@@ -1052,11 +1061,11 @@ class ConfigSetIni(configparser.RawConfigParser):
                     super().remove_section(section)
                     self._save_config()
                     if _debug_enabled():
-                        print(f"Removed section: [{section}]")
+                        _console.print(f":loudspeaker: [bold #FFFF00]Removed section:[/] [white on blue]{section}[/]")
                     return True
                 else:
                     if _debug_enabled():
-                        print(f"Section not found: [{section}]")
+                        _console.print(f":cross_mark: [white on red]Section not found:[/] [white on blue]{section}[/]")
                     return False
             else:
                 # Remove specific option from section
@@ -1065,19 +1074,19 @@ class ConfigSetIni(configparser.RawConfigParser):
                         super().remove_option(section, option)
                         self._save_config()
                         if _debug_enabled():
-                            print(f"Removed option: [{section}] {option}")
+                            _console.print(f":loudspeaker: [bold #FFFF00]Removed option:[/] [white on blue]{section}[/] {option}")
                         return True
                     else:
                         if _debug_enabled():
-                            print(f"Option not found: [{section}] {option}")
+                            _console.print(f":cross_mark: [white on red]Option not found:[/] [white on blue]{section}[/] {option}")
                         return False
                 else:
                     if _debug_enabled():
-                        print(f"Section not found: [{section}]")
+                        _console.print(f":cross_mark: [white on red]Section not found:[/] [white on blue]{section}[/]")
                     return False
         except Exception as e:
             if _debug_enabled():
-                print(f"Error removing config: {e}")
+                _console.print(f":cross_mark: [white on red]Error removing config:[/] [white on blue]{e}[/]")
             return False
 
     def remove_section(self, section: str) -> bool:
@@ -1234,8 +1243,8 @@ class ConfigSetIni(configparser.RawConfigParser):
                             self._print_colored(f"  {option} = {value}", 'option', value)
             except Exception:
                 if _debug_enabled():
-                    print(f"Error searching section {section_name}: {traceback.format_exc()}")
-        
+                    _console.print(f":cross_mark: [white on red]Error searching section[/] [white on blue]{section_name}[/]: {traceback.format_exc()}")
+
         return len(found) > 0
     
     def get_all_config(self, sections: List[str] = None) -> List[Tuple[str, Dict]]:
@@ -1265,12 +1274,12 @@ class ConfigSetIni(configparser.RawConfigParser):
     
     def print_all_config(self, sections: List[str] = None) -> List[Tuple[str, Dict]]:
         """Print all configuration in a formatted way."""
-        print(f"CONFIG FILE: {self.config_file}")
+        _console.print(f":japanese_symbol_for_beginner: [bold #FFFF00]CONFIG FILE:[/] [bold #00FFFF]{self.config_file}[/]")
         
         data = []
 
         if not str(self.config_file).endswith(".json"):
-            print(f"CONFIG INI:")    
+            _console.print(f":japanese_symbol_for_beginner: [bold #FFFF00]CONFIG INI:[/]")
             data = self.get_all_config(sections)
             
             for section_name, section_data in data:
@@ -1281,7 +1290,7 @@ class ConfigSetIni(configparser.RawConfigParser):
             print()  # Empty line at the end
         
         elif str(self.config_file).endswith(".json"):
-            print("CONFIG JSON:")
+            _console.print(f":llama: [bold #00FFFF]CONFIG JSON:[/] [#bold #FFFF00]{self.config_file}[/]")
             with open(self.config_file, 'r') as json_file:
                 try:
                     data = json.loads(json_file.read())
@@ -1430,7 +1439,7 @@ class ConfigMeta(type):
         if name in ['configname', 'CONFIGNAME', 'CONFIGFILE']:
             cls._config_instance.set_config_file(value)
         else:
-            print("Saving ....")
+            if os.getenv('DEBUG') in ['1', 'true', 'True']: print("Saving ....")
             super().__setattr__(name, value)
 
     def show(cls):
@@ -1439,9 +1448,8 @@ class ConfigMeta(type):
         if hasattr(cls, '_config_instance'):
             return cls._config_instance.print_all_config()
         else:
-            print("No config instance found.")
+            _console.print(":cross_mark: [white on red]No config instance found.[/]")
             return None
-
 
 class CONFIG(metaclass=ConfigMeta):
     """
@@ -1481,7 +1489,7 @@ class CONFIG(metaclass=ConfigMeta):
                         self.data = json.load(f)
                 except (json.JSONDecodeError, IOError) as e:
                     if _debug_enabled():
-                        print(f"Error loading JSON config: {e}")
+                        _console.print(f":cross_mark: [white on red]Error loading JSON config:[/] [white on blue]{e}[/]")
                     self.data = {}
             else:
                 # Create empty JSON file
@@ -1495,8 +1503,8 @@ class CONFIG(metaclass=ConfigMeta):
                     json.dump(self.data, f, indent=self.INDENT, ensure_ascii=False)
             except IOError as e:
                 if _debug_enabled():
-                    print(f"Error saving JSON config: {e}")
-    
+                    _console.print(f":cross_mark: [white on red]Error saving JSON config:[/] [white on blue]{e}[/]")
+
     def __getattr__(self, name: str) -> Any:
         """Get attribute from JSON data."""
         if name in self.data:
@@ -1506,7 +1514,7 @@ class CONFIG(metaclass=ConfigMeta):
             self.data[name] = ''
             self._save_json()
             return ''
-        
+        _console.print(f":cross_mark: [white on red]Attribute not found:[/] [white on blue]{name}[/]")
         raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{name}'")
     
     def __setattr__(self, name: str, value: Any) -> None:
@@ -1519,7 +1527,6 @@ class CONFIG(metaclass=ConfigMeta):
                 self._save_json()
             else:
                 warnings.warn("This only supports JSON configuration file!", Warning)
-
 
 def create_argument_parser() -> argparse.ArgumentParser:
     """Create command-line argument parser for the configuration tool."""
@@ -1575,7 +1582,7 @@ def main():
     args = parser.parse_args()
     
     if not args.config_file:
-        print("Error: Configuration file is required")
+        _console.print(":cross_mark: [white on redError:[/] [white on blue]Configuration file is required[/]")
         parser.print_help()
         return
     
@@ -1591,14 +1598,14 @@ def main():
             elif hasattr(config, 'print_all_config'):
                 config.print_all_config()
             else:
-                print("Configuration display not supported for this file type.")
-                
+                _console.print(f":cross_mark: [white on red]Configuration display not supported for this file type.[/]")
+
         elif args.read:
             # Handle different file types
             if hasattr(config, 'get_config') and args.section:
                 # INI file with section and option
                 if not key:
-                    print("Error: Key/option required for INI read operation")
+                    _console.print(":cross_mark: [white on red]Error:[/] [white on blue]Key/option required for INI read operation[/]")
                     return
                     
                 if args.list:
@@ -1613,13 +1620,13 @@ def main():
             elif hasattr(config, 'get_config') and not args.section:
                 # JSON or YAML file with key only
                 if not key:
-                    print("Error: Key required for read operation")
+                    _console.print(":cross_mark: [white on red]Error:[/] [white on blue]Key required for read operation[/]")
                     return
                     
                 value = config.get_config(key)
-                print(f"{key} = {value}")
+                _console.print(f"{key} = {value}")
             else:
-                print("Error: Unsupported read operation for this file type")
+                _console.print(":cross_mark: [white on red]Error:[/] [white on blue]Unsupported read operation for this file type[/]")
                 return
             
         elif args.write:
@@ -1627,27 +1634,27 @@ def main():
             if hasattr(config, 'write_config') and args.section:
                 # INI file with section and option
                 if not key:
-                    print("Error: Key/option required for INI write operation")
+                    _console.print(":cross_mark: [white on red]Error:[/] [white on blue]Key/option required for INI write operation[/]")
                     return
                 
                 value = args.value or ''
                 result = config.write_config(args.section, key, value)
-                print(f"Written: [{args.section}] {key} = {result}")
+                _console.print(f":white_check_mark: [white on green]Written:[/] [white on blue][{args.section}] {key} = {result}[/]")
                 
             elif hasattr(config, 'write_config') and not args.section:
                 # JSON or YAML file with key only
                 if not key:
-                    print("Error: Key required for write operation")
+                    _console.print(":cross_mark: [white on red]Error:[/] [white on blue]Key required for write operation[/]")
                     return
                 
                 value = args.value or ''
                 success = config.write_config(key, value)
                 if success:
-                    print(f"Written: {key} = {value}")
+                    _console.print(f":white_check_mark: [white on green]Written:[/] [white on blue]{key} = {value}[/]")
                 else:
-                    print(f"Failed to write: {key}")
+                    _console.print(f":cross_mark: [white on red]Failed to write:[/] [white on blue]{key}[/]")
             else:
-                print("Error: Unsupported write operation for this file type")
+                _console.print(":cross_mark: [white on red]Error:[/] [white on blue]Unsupported write operation for this file type[/]")
                 return
             
         elif args.delete:
@@ -1658,38 +1665,37 @@ def main():
                     # Remove specific option
                     success = config.remove_config(args.section, key)
                     if success:
-                        print(f"Removed: [{args.section}] {key}")
+                        _console.print(f":white_check_mark: [white on green]Removed:[/] [white on blue][{args.section}] {key}[/]")
                     else:
-                        print(f"Not found: [{args.section}] {key}")
+                        _console.print(f":cross_mark: [white on red]Not found:[/] [white on blue][{args.section}] {key}[/]")
                 else:
                     # Remove entire section
                     success = config.remove_config(args.section)
                     if success:
-                        print(f"Removed section: [{args.section}]")
+                        _console.print(f":white_check_mark: [white on green]Removed section:[/] [white on blue][{args.section}][/]")
                     else:
-                        print(f"Section not found: [{args.section}]")
-                        
+                        _console.print(f":cross_mark: [white on red]Section not found:[/] [white on blue][{args.section}][/]")
             elif hasattr(config, 'remove_config') and not args.section:
                 # JSON or YAML file
                 if not key:
-                    print("Error: Key required for delete operation")
+                    _console.print(":cross_mark: [white on red]Error:[/] [white on blue]Key required for delete operation[/]")
                     return
                     
                 success = config.remove_config(key)
                 if success:
-                    print(f"Removed: {key}")
+                    _console.print(f":white_check_mark: [white on green]Removed:[/] [white on blue]{key}[/]")
                 else:
-                    print(f"Key not found: {key}")
+                    _console.print(f":cross_mark: [white on red]Key not found:[/] [white on blue]{key}[/]")
             else:
-                print("Error: Unsupported delete operation for this file type")
+                _console.print(":cross_mark: [white on red]Error:[/] [white on blue]Unsupported delete operation for this file type[/]")
                 return
             
         else:
-            print("Error: Specify --read, --write, --delete, --all, or --show")
+            _console.print(":cross_mark: [white on red]Error:[/] [white on blue]Specify --read, --write, --delete, --all, or --show[/]")
             parser.print_help()
             
     except Exception as e:
-        print(f"Error: {e}")
+        _console.print(f":cross_mark: [white on red]Error:[/] [white on blue]{e}[/]")
         if _debug_enabled():
             traceback.print_exc()
 
