@@ -1,6 +1,10 @@
-from __future__ import print_function
-import os
-from configset import configset
-cfg = configset()
-data = cfg.get_config("DATABASE", 'host', '127.0.0.1')
-print("data =", data)
+from configset import ConfigSet
+
+# config = ConfigSet(config_file=r"traceback.json")
+config = ConfigSet(config_file=r"docker-compose.yml")
+
+config.show()
+d = config.find("networks:cloud")
+# d = config.find("DATA1:DATA2")
+print(f"FOUND: {d}")
+

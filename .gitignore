@@ -10,3 +10,9 @@
 build/
 dist/
 *egg-info/
+
+# Added entries (1 items)
+configset/traceback.json
+
+# Added entries (1 items)
+configset/docker-compose.yml
