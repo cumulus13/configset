@@ -101,7 +101,6 @@ if HAS_RICH:
 
     rich_traceback.install(show_locals=False, width=os.get_terminal_size()[0], theme='fruity')
 
-
 def get_version():
     """
     Get the version from __version__.py file.
@@ -127,8 +126,7 @@ def get_version():
 __version__ = get_version()
 __platform__ = "all"
 __contact__ = "licface@yahoo.com"
-__all__ = ["ConfigSet", "CONFIG", "MultiOrderedDict", "__version__", "get_version"]
-
+__all__ = ["ConfigSet", "CONFIG", "MultiOrderedDict", "__version__", "get_version", "ConfigSetIni", "ConfigSetYaml", "ConfigSetJson", "detect_file_type", "_validate_file_path", "ConfigMeta"]
 
 def _debug_enabled() -> bool:
     """Check if debug mode is enabled via environment variables."""
@@ -145,6 +143,8 @@ def detect_file_type(content: str) -> Any:
     Returns:
         File type: 'json', 'ini', 'yaml', or False if unable to detect
     """
+    if not content:
+        return False
     # Strip leading/trailing whitespace
     if os.path.isfile(content):
         # Check file extension first
@@ -157,8 +157,13 @@ def detect_file_type(content: str) -> Any:
             return 'ini'
             
         # If extension doesn't help, read content
-        with open(content, 'r') as f:
-            data = f.read().strip()
+        # with open(content, 'r') as f:
+        #     data = f.read().strip()
+        try:
+            with open(content, 'r', encoding='utf-8', errors='replace') as f:
+                data = f.read().strip()
+        except Exception:
+            return False
     else:
         data = content.strip()
 
@@ -248,12 +253,14 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
     def load(self, json_file=None):
         """Load JSON data from file."""
         json_file = json_file or self.json_file
-        if os.path.isfile(json_file):
-            with open(json_file, 'r') as f:
+        # if os.path.isfile(json_file):
+        #     with open(json_file, 'r') as f:
+        #         self.json = json.load(f)
+        if json_file and os.path.isfile(json_file):
+            with open(json_file, 'r', encoding='utf-8', errors='strict') as f:
                 self.json = json.load(f)
         else:
-            if HAS_RICH:
-                _console.print(f"\n:cross_mark: [white on red]JSON file not found:[/] [white on blue]{json_file}[/]")
+            _console.print(f"\n:cross_mark: [white on red]JSON file not found:[/] [white on blue]{json_file}[/]")
             raise FileNotFoundError(f"JSON file not found: {json_file}")
         return self.json
     
@@ -303,16 +310,32 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
 
     def _save_config(self, json_file=None) -> None:
         """Save current configuration to file."""
-        source = json_file or self.json_file
+        # source = json_file or self.json_file
+        # try:
+        #     self._load_config(source)
+
+        #     with open(self.json_file, "w", encoding="utf-8") as f:
+        #         json.dump(self.json, f, indent=2)
+
+        # except Exception as e:
+        #     if _debug_enabled():
+        #         _console.print(f":cross_mark: [white on red]Error saving JSON config:[/] [white on blue]{e}[/]")
+        target = json_file or self.json_file
+        if not target:
+            raise ConfigurationError("No JSON file configured for saving")
         try:
-            self._load_config(source)
-
-            with open(self.json_file, "w", encoding="utf-8") as f:
-                json.dump(self.json, f, indent=2)
-
+            # ensure parent dir exists
+            p = Path(target)
+            if not p.parent.exists():
+                p.parent.mkdir(parents=True, exist_ok=True)
+            with open(target, "w", encoding="utf-8") as f:
+                json.dump(self.json if isinstance(self.json, (dict, list)) else {}, f, indent=2, ensure_ascii=False)
         except Exception as e:
+            logger.error("Error saving JSON config: %s", e)
             if _debug_enabled():
                 _console.print(f":cross_mark: [white on red]Error saving JSON config:[/] [white on blue]{e}[/]")
+            raise
+
                 
     def dump(self, *args, **kwargs):
         """Dump JSON data to file."""
@@ -356,11 +379,29 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
     
     def set_config_file(self, config_file: str) -> bool:
         """Set a new configuration file path."""
-        if os.path.isfile(config_file):
-            self.json_file = config_file 
-            self._load_config()
+        # if os.path.isfile(config_file):
+        #     self.json_file = config_file 
+        #     self._load_config()
+        #     return True
+        # else:
+        #     _console.print("\n:cross_mark: [white on red]Invalid Json File ![/]")
+        #     return False
+        # allow setting a new file path (create if necessary)
+        if not config_file:
+            return False
+        self.json_file = config_file
+        try:
+            if os.path.isfile(self.json_file):
+                self._load_config()
+            else:
+                # initialize empty json and save to create file
+                self.json = {} 
+                p = Path(self.json_file)
+                if not p.parent.exists():
+                    p.parent.mkdir(parents=True, exist_ok=True)
+                self._save_config(self.json_file)
             return True
-        else:
+        except Exception:
             _console.print("\n:cross_mark: [white on red]Invalid Json File ![/]")
             return False
     
@@ -429,11 +470,29 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
             current = q.popleft()
             if isinstance(current, dict):
                 for k in list(current.keys()):
-                    if current[k] == value:
+                    # if current[k] == value:
+                    #     del current[k]
+                    #     found = True
+                    # elif isinstance(current[k], dict):
+                    #     q.append(current[k])
+                    v = current.get(k)
+                    if v == value:
                         del current[k]
                         found = True
-                    elif isinstance(current[k], dict):
-                        q.append(current[k])
+                    elif isinstance(v, dict) or isinstance(v, list):
+                        q.append(v)
+            elif isinstance(current, list):
+                # remove matching items and queue nested containers
+                i = 0
+                while i < len(current):
+                    v = current[i]
+                    if v == value:
+                        current.pop(i)
+                        found = True
+                        continue
+                    if isinstance(v, (dict, list)):
+                        q.append(v)
+                    i += 1
         if found:
             self._save_config()
         return found
@@ -589,7 +648,14 @@ class ConfigSetYaml:
         return self._load_config(yaml_file)
     
     def loads(self, yaml_file: str = ''):
-        if os.path.isfile(yaml_file):
+        # if os.path.isfile(yaml_file):
+        #     return self._load_config(yaml_file)
+        # else:
+        #     if isinstance(yaml_file, str):
+        #         self.yaml = yaml.safe_load(yaml_file)
+        if not yaml_file:
+            return self._load_config(yaml_file)
+        if isinstance(yaml_file, str) and os.path.isfile(yaml_file):
             return self._load_config(yaml_file)
         else:
             if isinstance(yaml_file, str):
@@ -609,16 +675,24 @@ class ConfigSetYaml:
     def _load_config(self, yaml_file=None):
         """Load configuration from file with error handling."""
         source = yaml_file or self.yaml_file
+        if _debug_enabled():
+            _console.print(f"\n:gear: [white on blue]Loading YAML config:[/] [white on blue]{source}[/]")
+            _console.print(f":mag: [white on blue]YAML File is File:[/] [white on blue]{os.path.isfile(source)}[/]")
         try:
             if os.path.isfile(source):
                 with open(source, "r", encoding="utf-8") as f:
                     self.yaml = yaml.safe_load(f)
+                    if _debug_enabled():
+                        _console.print(f":white_check_mark: (1) [white on green]YAML config loaded successfully from file.[/]")
+                        _console.print(f":gear: [white on blue] (1) YAML data type:[/] [white on blue]{type(self.yaml)}[/]")
             else:
                 self.yaml = yaml.safe_load(source)  # Fix: was yaml.save_load
+                if _debug_enabled():
+                        _console.print(f":white_check_mark: (2) [white on green]YAML config loaded successfully from file.[/]")
+                        _console.print(f":gear: [white on blue] (2) YAML data type:[/] [white on blue]{type(self.yaml)}[/]")
+            if self.yaml is None:
+                self.yaml = {}
             return self.yaml
-        # except Exception as e:
-        #     if _debug_enabled():
-        #         _console.print(f":cross_mark: [white on red]Error loading YAML config:[/] [white on blue]{e}[/]")
         except FileNotFoundError:
             if _debug_enabled():
                 _console.print(f"[:cross_mark: [white on red]Config file not found:[/] [white on blue]{source}[/]")
@@ -634,6 +708,13 @@ class ConfigSetYaml:
                 _console.print(f":cross_mark: [white on red]Invalid encoding in config file:[/] [white on blue]{e}[/]")
             logger.error(f"Invalid encoding in config file: {e}")
             raise ConfigurationError(f"Config file has invalid encoding: {e}")
+        except yaml.YAMLError as e:
+            # tolerate YAML parse errors in production: log and fallback to empty mapping
+            logger.warning("Invalid YAML content in %s: %s", source, e)
+            if _debug_enabled():
+                _console.print(f":cross_mark: [white on red]Invalid YAML content:[/] [white on blue]{e}[/]")
+            self.yaml = {}
+            return self.yaml
         except Exception as e:
             if _debug_enabled:
                 _console.print(f":cross_mark: [white on red]Unexpected error loading config:[/] [white on blue]{e}[/]")
@@ -645,10 +726,36 @@ class ConfigSetYaml:
     
     def _save_config(self, yaml_file: str = ''):
         """Save the current YAML configuration to the file."""
-        yaml_file = self.yaml_file
-        if yaml_file and self.yaml:
-            with open(yaml_file, "w", encoding="utf-8") as f:
-                yaml.safe_dump(yaml, f)
+        # yaml_file = self.yaml_file
+        # if yaml_file and self.yaml:
+        #     with open(yaml_file, "w", encoding="utf-8") as f:
+        #         yaml.safe_dump(yaml, f)
+        # target = yaml_file or self.yaml_file
+        # if not target or self.yaml is None:
+        #     return
+        # try:
+        #     with open(target, "w", encoding="utf-8") as f:
+        #         # write the YAML data (self.yaml), not the yaml module
+        #         yaml.safe_dump(self.yaml, f)
+        # except Exception as e:
+        #     if _debug_enabled():
+        #         _console.print(f":cross_mark: [white on red]Error saving YAML config:[/] [white on blue]{e}[/]")
+        target = yaml_file or self.yaml_file
+        if not target:
+            raise ConfigurationError("No YAML file configured for saving")
+        if self.yaml is None:
+            self.yaml = {}
+        try:
+            p = Path(target)
+            if not p.parent.exists():
+                p.parent.mkdir(parents=True, exist_ok=True)
+            with open(target, "w", encoding="utf-8") as f:
+                yaml.safe_dump(self.yaml, f, default_flow_style=False, allow_unicode=True)
+        except Exception as e:
+            logger.error("Error saving YAML config: %s", e)
+            if _debug_enabled():
+                _console.print(f":cross_mark: [white on red]Error saving YAML config:[/] [white on blue]{e}[/]")
+            raise
 
     def dump(self, *args, **kwargs):
         """Dump the current YAML configuration."""
@@ -701,7 +808,12 @@ class ConfigSetYaml:
     
     def get_config(self, key):
         """Get configuration value by key."""
-        if isinstance(self.yaml, dict):  # Fix: was self.json
+        if _debug_enabled():
+            _console.print(f"\n:question: [bold #FFFF00]Getting config for key:[/] [bold cyan]{key}[/]")
+            _console.print(f"\n:gear: [white on blue]Current YAML data type:[/] [white on blue]{type(self.yaml)}[/]")
+        if not isinstance(self.yaml, dict):  # Fix: was self.json
+            self._load_config()
+        if isinstance(self.yaml, dict):  # Second try
             return self.yaml.get(key, None)  # Fix: was self.json
         else:
             _console.print(f"\n:cross_mark: [white on red]Invalid YAML File ![/]")  # Fix: was Json File
@@ -752,17 +864,40 @@ class ConfigSetYaml:
     
     def remove_value_anywhere(self, value):
         """Remove all occurrences of a value from the YAML structure."""
-        q = deque([self.yaml])  # Fix: was self.json
+        # q = deque([self.yaml])  # Fix: was self.json
+        # found = False
+        # while q:
+        #     current = q.popleft()
+        #     if isinstance(current, dict):
+        #         for k in list(current.keys()):
+        #             if current[k] == value:
+        #                 del current[k]
+        #                 found = True
+        #             elif isinstance(current[k], dict):
+        #                 q.append(current[k])
+        q = deque([self.yaml])
         found = False
         while q:
             current = q.popleft()
             if isinstance(current, dict):
                 for k in list(current.keys()):
-                    if current[k] == value:
+                    v = current.get(k)
+                    if v == value:
                         del current[k]
                         found = True
-                    elif isinstance(current[k], dict):
-                        q.append(current[k])
+                    elif isinstance(v, (dict, list)):
+                        q.append(v)
+            elif isinstance(current, list):
+                i = 0
+                while i < len(current):
+                    v = current[i]
+                    if v == value:
+                        current.pop(i)
+                        found = True
+                        continue
+                    if isinstance(v, (dict, list)):
+                        q.append(v)
+                    i += 1
         if found:
             self._save_config()
         return found
@@ -1730,7 +1865,6 @@ def create_argument_parser() -> argparse.ArgumentParser:
                        help='Show configuration with syntax highlighting')
     
     return parser
-
 
 def main():
     """Main CLI interface function."""

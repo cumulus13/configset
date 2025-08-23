@@ -100,25 +100,32 @@ __platform__ = "all"
 __status__ = "Production"
 
 __all__ = [
-    # Main classes
-    'ConfigSet',
-    'CONFIG',
-    'MultiOrderedDict',
-    'ConfigMeta',
-    
+    "ConfigSet", 
+    "CONFIG", 
+    "MultiOrderedDict", 
+    "get_version", 
+    "ConfigSetIni", 
+    "ConfigSetYaml", 
+    "ConfigSetJson", 
+    "detect_file_type",
+    "_validate_file_path",
+    "ConfigMeta"
+
+    # Package metadata
+    "__version__",
+    '__author__',
+    '__email__',
+    '__license__',
+    '__platform__',
+    '__status__',
+
     # Utility functions
     'create_argument_parser',
     'main',
     '_debug_enabled',
     
-    # Package metadata
-    '__version__',
-    '__author__',
-    '__email__',
-    '__license__',
-    '__platform__',
-    '__status__'
 ]
+
 
 # Package-level convenience functions
 def create_config(config_file: str = '', auto_write: bool = True) -> ConfigSet:
