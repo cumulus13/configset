@@ -113,13 +113,19 @@ def get_extras_require():
         'full': [
             'rich>=10.0.0',
             'make-colors>=1.0.0',
-            'licface'
+            'json',
+            'pyyaml',
+            'licface',
+            'jsoncolor>=0.2.0', 
+            'richcolorlog',
+            
         ],
         'colors': [
             'rich>=10.0.0',
             'make-colors>=1.0.0',
             'licface',
             'jsoncolor>=0.2.0', 
+            'richcolorlog',
         ],
         'json': [
             'jsoncolor>=0.2.0'
