@@ -129,8 +129,7 @@ __all__ = ["ConfigSet", "CONFIG", "MultiOrderedDict", "__version__", "get_versio
 
 def _debug_enabled() -> bool:
     """Check if debug mode is enabled via environment variables."""
-    return (os.getenv('DEBUG', '').lower() in ['1', 'true', 'yes'] or
-            os.getenv('DEBUG_SERVER', '').lower() in ['1', 'true', 'yes'])
+    return (os.getenv('DEBUG', '').lower() in ['1', 'true', 'yes'] or os.getenv('DEBUG_SERVER', '').lower() in ['1', 'true', 'yes'])
 
 def detect_file_type(content: str) -> Any:
     """
@@ -335,7 +334,6 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                 _console.print(f":cross_mark: [white on red]Error saving JSON config:[/] [white on blue]{e}[/]")
             raise
 
-                
     def dump(self, *args, **kwargs):
         """Dump JSON data to file."""
         with open(self.json_file, 'w', encoding='utf-8') as f:
@@ -412,6 +410,10 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
             if HAS_RICH:
                 _console.print(f"\n:cross_mark: [white on red]Invalid Json File ![/]")
             return None
+        
+    def get_config_file(self):
+        """Get the filename of the JSON configuration file."""
+        return str(self.json_file)    
     
     def get(self, key):
         """Alias for get_config."""
@@ -795,6 +797,10 @@ class ConfigSetYaml:
         """Get the configuration name (alias for filename)."""
         return self.filename
     
+    def get_config_file(self):
+        """Get the filename of the YAML configuration file."""
+        return str(self.yaml_file)
+    
     def set_config_file(self, config_file: str) -> bool:
         """Set a new configuration file path."""
         if os.path.isfile(config_file):
@@ -1094,6 +1100,10 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
     @property
     def configname(self) -> str:
         """Get absolute path of config file."""
+        return str(self._config_file_path)
+    
+    def get_config_file(self):
+        """Get the filename of the INI configuration file."""
         return str(self._config_file_path)
 
     def set_config_file(self, config_file: str) -> None:
@@ -1629,10 +1639,9 @@ class configset(ConfigSet):
 #             _console.print(":cross_mark: [white on red]No config instance found.[/]")
 #             return None
 
-# ...existing code...
+
 class ConfigMeta(type):
     """Metaclass for creating class-based configuration interfaces."""
-    
     def __new__(mcs, name, bases, attrs):
         # Determine config file name from class attributes (if provided)
         config_file = attrs.get('CONFIGFILE') or attrs.get('configname') or ''
@@ -1703,7 +1712,6 @@ class ConfigMeta(type):
     #             print("Saving ....")
     #         super().__setattr__(name, value)
     
-    # ...existing code...
     def __setattr__(cls, name, value):
         """Handle attribute assignment."""
         if name in ['configname', 'CONFIGNAME', 'CONFIGFILE']:
