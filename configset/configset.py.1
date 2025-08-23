@@ -26,13 +26,6 @@ if sys.version_info.major == 2:
     configparser = ConfigParser
 else:
     import configparser
-
-try:
-    from richcolorlog import setup_logging
-    logger = setup_logging(__name__)
-except Exception as e:
-    import logging
-    logger = logging.getLogger(__name__)
     
 from dataclasses import dataclass
 
@@ -40,10 +33,7 @@ from dataclasses import dataclass
 HAS_RICH = False
 HAS_JSONCOLOR = False
 HAS_MAKECOLOR = False
-jprint = print
-def make_colors(data, *args, **kwargs):
-    """Dummy function for make_colors, replace with actual implementation if available."""
-    return str(data)  # Just return string representation for now
+
 try:
     from rich import print_json
     from rich.console import Console
@@ -190,21 +180,6 @@ def detect_file_type(content: str) -> Any:
 
     return False
 
-def _validate_file_path(file_path: Union[str, Path]) -> Path:
-    """Validate and sanitize file path."""
-    try:
-        path = Path(file_path).resolve()
-        # Basic path traversal protection
-        if '..' in str(path) or str(path).startswith('/'):
-            raise ValueError("Potentially unsafe path detected")
-        return path
-    except (ValueError, OSError) as e:
-        raise ConfigurationError(f"Invalid file path: {e}")
-    
-class ConfigurationError(Exception):
-    """Custom exception for configuration errors."""
-    pass
-
 class MultiOrderedDict(OrderedDict):
     """OrderedDict that extends lists when duplicate keys are encountered."""
     
@@ -266,32 +241,10 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                     self.json = json.load(f)
             else:
                 self.json = json.loads(source)
-            return self.json
-        # except Exception as e:
-        #     self.json = {}
-        #     if _debug_enabled():
-        #         _console.print(f":cross_mark: [white on red]Error loading JSON config:[/] [white on blue]{e}[/]")
-        except FileNotFoundError:
-            if _debug_enabled():
-                _console.print(f"[:cross_mark: [white on red]Config file not found:[/] [white on blue]{source}[/]")
-            logger.warning(f"Config file not found: {source}")
-            # Create empty config or use defaults
-        except PermissionError:
-            if _debug_enabled():
-                _console.print(f":cross_mark: [white on red]Permission denied accessing:[/] [white on blue]{source}[/]")
-            logger.error(f"Permission denied accessing: {source}")
-            raise ConfigurationError(f"Cannot access config file: {source}")
-        except UnicodeDecodeError as e:
-            if _debug_enabled:
-                _console.print(f":cross_mark: [white on red]Invalid encoding in config file:[/] [white on blue]{e}[/]")
-            logger.error(f"Invalid encoding in config file: {e}")
-            raise ConfigurationError(f"Config file has invalid encoding: {e}")
         except Exception as e:
-            if _debug_enabled:
-                _console.print(f":cross_mark: [white on red]Unexpected error loading config:[/] [white on blue]{e}[/]")
-            logger.error(f"Unexpected error loading config: {e}")
-            raise ConfigurationError(f"Failed to load configuration: {e}")
-        self.json = {}
+            if _debug_enabled():
+                _console.print(f":cross_mark: [white on red]Error loading JSON config:[/] [white on blue]{e}[/]")
+            self.json = {}
         return self.json
     
     def loads(self, json_file=None):
@@ -345,11 +298,6 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         return str(self.json_file)
     
     @property
-    def config_file(self):
-        """Get the configuration name (alias for filename)."""
-        return self.filename
-    
-    @property
     def configname(self):
         """Get the configuration name (alias for filename)."""
         return self.filename
@@ -361,7 +309,8 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
             self._load_config()
             return True
         else:
-            _console.print("\n:cross_mark: [white on red]Invalid Json File ![/]")
+            if HAS_RICH:
+                _console.print("\n:cross_mark: [white on red]Invalid Json File ![/]")
             return False
     
     def get_config(self, key):
@@ -438,7 +387,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
             self._save_config()
         return found
     
-    def remove_config(self, key: str = '', value: str = '') -> bool:
+    def remove_config(self, key: str = None, value: str = None) -> bool:
         """Remove configuration key or value."""
         if value and not key:
             return self.remove_value_anywhere(value)
@@ -492,7 +441,10 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
             return True
         except Exception as e:
             if _debug_enabled():
-                _console.print(f"\n:cross_mark: [white on red]Error removing config:[/] [white on blue]{e}[/]")
+                if HAS_RICH:
+                    _console.print(f"\n:cross_mark: [white on red]Error removing config:[/] [white on blue]{e}[/]")
+                else:
+                    _cosnole.print(f":cross_mark: [white on red]Error removing config:[/] [white on blue]{e}[/]")
             return False
 
     def remove_key(self, key: str) -> bool:
@@ -574,148 +526,139 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                 return {}
         except Exception as e:
             if _debug_enabled():
-                _console.print(f"\n: cross_mark: [white on red]Error finding key:[/] [white on blue]{key}[/]")
+                _console.print(f"\n:cross_mark: [white on red]Error finding key:[/] [white on blue]{key}[/]")
             return {}
 
 class ConfigSetYaml:
-    def __init__(self, yaml_file: str = '', config_file: str = '', **kwargs):
+    """Enhanced configuration file manager supporting YAML format."""
+    
+    def __init__(self, yaml_file: str = None, config_file: str = None, **kwargs):
+        """
+        Initialize YAML configuration handler.
+        
+        Args:
+            yaml_file: Path to YAML configuration file
+            config_file: Alternative name for yaml_file
+            **kwargs: Additional arguments for YAML loader
+        """
         self.yaml_file = yaml_file or config_file
         self.file = self.yaml_file
         self.kwargs = kwargs
         self.yaml = self._load_config()
-
+    
     def load(self, yaml_file=None):
         """Load YAML data from file."""
-        return self._load_config(yaml_file)
-    
-    def loads(self, yaml_file: str = ''):
+        yaml_file = yaml_file or self.yaml_file
         if os.path.isfile(yaml_file):
-            return self._load_config(yaml_file)
+            with open(yaml_file, 'r') as f:
+                self.yaml = yaml.safe_load(f)
         else:
-            if isinstance(yaml_file, str):
-                self.yaml = yaml.safe_load(yaml_file)
-            elif isinstance(yaml_file, bytes):
-                self.yaml = yaml.safe_load(yaml_file.decode("utf-8"))
-            elif isinstance(yaml_file, dict):
-                self.yaml = yaml_file
-            else:
-                if _debug_enabled():
-                    _console.print(f"\n:cross_mark: [white on red]Invalid YAML input:[/] [white on blue]{yaml_file}[/]")
-                raise TypeError(f"Invalid YAML input: {type(yaml_file)}")
-
-    def read(self, yaml_file: str = ''):
-        return self.loads(yaml_file)
-
+            _console.print(f"\n:cross_mark: [white on red]YAML file not found:[/] [white on blue]{yaml_file}[/]")
+            raise FileNotFoundError(f"YAML file not found: {yaml_file}")
+        return self.yaml
+    
     def _load_config(self, yaml_file=None):
         """Load configuration from file with error handling."""
         source = yaml_file or self.yaml_file
+        # print(f"source: {source}, is_file: {os.path.isfile(source)}")
         try:
             if os.path.isfile(source):
                 with open(source, "r", encoding="utf-8") as f:
+                    # self.yaml = yaml.load(f, Loader=yaml.SafeLoader, **self.kwargs)
                     self.yaml = yaml.safe_load(f)
             else:
-                self.yaml = yaml.safe_load(source)  # Fix: was yaml.save_load
-            return self.yaml
-        # except Exception as e:
-        #     if _debug_enabled():
-        #         _console.print(f":cross_mark: [white on red]Error loading YAML config:[/] [white on blue]{e}[/]")
-        except FileNotFoundError:
-            if _debug_enabled():
-                _console.print(f"[:cross_mark: [white on red]Config file not found:[/] [white on blue]{source}[/]")
-            logger.warning(f"Config file not found: {source}")
-            # Create empty config or use defaults
-        except PermissionError:
-            if _debug_enabled():
-                _console.print(f":cross_mark: [white on red]Permission denied accessing:[/] [white on blue]{source}[/]")
-            logger.error(f"Permission denied accessing: {source}")
-            raise ConfigurationError(f"Cannot access config file: {source}")
-        except UnicodeDecodeError as e:
-            if _debug_enabled:
-                _console.print(f":cross_mark: [white on red]Invalid encoding in config file:[/] [white on blue]{e}[/]")
-            logger.error(f"Invalid encoding in config file: {e}")
-            raise ConfigurationError(f"Config file has invalid encoding: {e}")
+                self.yaml = yaml.save_load(source)
         except Exception as e:
-            if _debug_enabled:
-                _console.print(f":cross_mark: [white on red]Unexpected error loading config:[/] [white on blue]{e}[/]")
-            logger.error(f"Unexpected error loading config: {e}")
-            raise ConfigurationError(f"Failed to load configuration: {e}")
-        
-        self.yaml = {}
+            if _debug_enabled():
+                _console.print(f":cross_mark: [white on red]Error loading YAML config:[/] [white on blue]{e}[/]")
+            self.yaml = {}
         return self.yaml
     
-    def _save_config(self, yaml_file: str = ''):
-        """Save the current YAML configuration to the file."""
-        yaml_file = self.yaml_file
-        if yaml_file and self.yaml:
-            with open(yaml_file, "w", encoding="utf-8") as f:
-                yaml.safe_dump(yaml, f)
+    def loads(self, yaml_file=None):
+        """Alias for _load_config."""
+        return self._load_config(yaml_file)
+
+    def read(self, yaml_file=None):
+        """Alias for _load_config."""
+        return self._load_config(yaml_file)
+    
+    def _save_config(self, yaml_file=None) -> None:
+        """Save current configuration to file."""
+        source = yaml_file or self.yaml_file
+        try:
+            self._load_config(source)
+
+            with open(self.yaml_file, "w") as f:
+                yaml.dump(self.yaml, f, sort_keys=False, allow_unicode=True)
+
+        except Exception as e:
+            if _debug_enabled():
+                _console.print(f":cross_mark: [white on red]Error saving YAML config:[/] [white on blue]{e}[/]")
 
     def dump(self, *args, **kwargs):
-        """Dump the current YAML configuration."""
-        with open(self.yaml_file, "w", encoding="utf-8") as f:
-            yaml.safe_dump(self.yaml, f, *args, **kwargs)
+        """Dump YAML data to file."""
+        with open(self.yaml_file, "w") as f:
+            yaml.dump(self.yaml, f, sort_keys=False, allow_unicode=True)
         return self.yaml
 
     def dumps(self, *args, **kwargs):
-        """Dump the current YAML configuration to a string."""
-        return yaml.safe_dump(self.yaml, *args, **kwargs)
-
+        """Save configuration (alias for _save_config)."""
+        return self._save_config(*args, **kwargs)
+    
     def show(self):
-        """Show the current YAML configuration."""
+        """Display YAML configuration with colored output if available."""
+        self._load_config()
         if HAS_JSONCOLOR:
             jprint(self.yaml)
         elif HAS_RICH:
-            _console.print(self.yaml)
+            _console.print_json(data=self.yaml)
         elif HAS_MAKECOLOR:
             print(make_colors(self.yaml, 'lc'))
         else:
-            print(yaml.safe_dump(self.yaml))
-
+            print(json.dumps(self.yaml, indent=2))
+            
     def print(self):
+        """Alias for show method."""
         return self.show()
     
     @property
     def filename(self):
-        """Get the filename of the YAML configuration file."""
+        """Get the filename of the JSON configuration file."""
         return str(self.yaml_file)
     
     @property
     def config_file(self):
-        """Get the configuration name (alias for filename)."""
-        return self.filename
-    
-    @property
-    def configname(self):
-        """Get the configuration name (alias for filename)."""
-        return self.filename
-    
+        """Get the current configuration file path."""
+        return str(self.yaml_file)
+
     def set_config_file(self, config_file: str) -> bool:
         """Set a new configuration file path."""
         if os.path.isfile(config_file):
-            self.yaml_file = config_file  # Fix: was self.json_file
+            self.json_file = config_file 
             self._load_config()
             return True
         else:
-            _console.print("\n:cross_mark: [white on red]Invalid YAML File ![/]")  # Fix: was Json File
+            if HAS_RICH:
+                _console.print("\n:cross_mark: [white on red]Invalid Json File ![/]")
             return False
     
     def get_config(self, key):
         """Get configuration value by key."""
-        if isinstance(self.yaml, dict):  # Fix: was self.json
-            return self.yaml.get(key, None)  # Fix: was self.json
+        if isinstance(self.json, dict):
+            return self.json.get(key, None)
         else:
-            _console.print(f"\n:cross_mark: [white on red]Invalid YAML File ![/]")  # Fix: was Json File
+            _console.print(f"\n:cross_mark: [white on red]Invalid Json File ![/]")
             return None
-
+    
     def get(self, key):
-        """Get configuration value by key."""
+        """Alias for get_config."""
         return self.get_config(key)
     
     def read_config(self, key):
-        """Read configuration value by key."""
+        """Alias for get_config."""
         return self.get_config(key)
     
-    def write_config(self, key, value: str = '') -> bool:
+    def write_config(self, key, value: Any = None) -> bool:
         """Write configuration value to nested key."""
         try:
             keys = re.split(r"[:;|]", key)
@@ -724,7 +667,6 @@ class ConfigSetYaml:
             if not keys:
                 if _debug_enabled():
                     _console.print(f"\n:cross_mark: [bold #FFFF00]No key ![/]")
-                    
                 return False
 
             d = self.yaml
@@ -747,12 +689,12 @@ class ConfigSetYaml:
             return False
         
     def set(self, key, value: str = ''):
-        """Set configuration value by key."""
+        """Alias for write_config."""
         return self.write_config(key, value)
     
     def remove_value_anywhere(self, value):
-        """Remove all occurrences of a value from the YAML structure."""
-        q = deque([self.yaml])  # Fix: was self.json
+        """Remove all occurrences of a value from the JSON structure."""
+        q = deque([self.json])
         found = False
         while q:
             current = q.popleft()
@@ -767,7 +709,7 @@ class ConfigSetYaml:
             self._save_config()
         return found
     
-    def remove_config(self, key: str = '', value: str = '') -> bool:
+    def remove_config(self, key: str = None, value: str = None) -> bool:
         """Remove configuration key or value."""
         if value and not key:
             return self.remove_value_anywhere(value)
@@ -779,7 +721,7 @@ class ConfigSetYaml:
                     _console.print(f"\n:cross_mark: [bold #FFFF00]No key ![/]")
                 return False
 
-            d = self.yaml  # Fix: was self.json
+            d = self.json
             # Traverse to parent dict
             for k in keys[:-1]:
                 if k in d and isinstance(d[k], dict):
@@ -798,11 +740,14 @@ class ConfigSetYaml:
             if value is None:
                 del d[last_key]
             else:
+                # If dict value matches exactly → remove
                 if d[last_key] == value:
                     del d[last_key]
+                # Or if it's a list → remove item value
                 elif isinstance(d[last_key], list) and value in d[last_key]:
                     d[last_key].remove(value)
                 else:
+                    # Value mismatch
                     return False
 
             self._save_config()
@@ -823,8 +768,8 @@ class ConfigSetYaml:
                     _console.print(f"\n:cross_mark: [bold #FFFF00]{msg}[/]") if HAS_RICH else print(msg)
                 return False
 
-            d = self.yaml  # Fix: was self.json
-            for k in keys[:-1]:
+            d = self.json
+            for k in keys[:-1]:  # Stop before last key
                 if k in d and isinstance(d[k], dict):
                     d = d[k]
                 else:
@@ -849,22 +794,20 @@ class ConfigSetYaml:
                 msg = f"Error removing key: {e}"
                 _console.print(f"\n:cross_mark: [white on red]{msg}[/]") if HAS_RICH else print(msg)
             return False
-
+    
     def remove_section(self, key: str):
         """Alias for remove_key."""
         return self.remove_key(key)
-    
+
     def find(self, key: str, value=None):
-        """Find all keys that have the specified value."""
         try:
             keys = re.split(r"[:;|]", key)
             keys = [i.strip() for i in keys if i.strip()]
             # print(">>> KEYS =", keys)
-            # print(">>> JSON ROOT KEYS =", list(self.yaml.keys())[:10], "...")  # tampilkan sebagian saja
+            # print(">>> JSON ROOT KEYS =", list(self.json.keys())[:10], "...")  # tampilkan sebagian saja
             if not keys:
                 if _debug_enabled():
                     _console.print(f"\n:cross_mark: [bold #FFFF00]No key ![/]")
-                    
                 return {}
 
             d = self.yaml
@@ -892,7 +835,7 @@ class ConfigSetYaml:
                 return {}
         except Exception as e:
             if _debug_enabled():
-                _console.print(f"\n: cross_mark: [white on red]Error finding key:[/] [white on blue]{key}[/]")
+                _console.print(f"\n:cross_mark: [white on red]Error finding key:[/] [white on blue]{key}[/]")
             return {}
 
 class ConfigSetYAML(ConfigSetYaml):
@@ -912,132 +855,97 @@ class configsetjson(ConfigSetJson):
     """Alias for ConfigSetJson with lowercase naming."""
     pass
 
-class ConfigSetIni(configparser.RawConfigParser): # type: ignore
+class ConfigSetIni(configparser.RawConfigParser):
+    """
+    Enhanced configuration file manager supporting INI format with automatic
+    file creation, type conversion, and various data parsing methods.
+    """
+    
     def __init__(self, config_file: str = '', auto_write: bool = True, config_dir: str = '', config_name: str = '', **kwargs):
+        """
+        Initialize ConfigSetIni instance.
+        
+        Args:
+            config_file: Path to configuration file
+            auto_write: Whether to automatically create missing files/sections
+            config_dir: Directory for configuration files
+            config_name: Name of the configuration file
+            **kwargs: Additional arguments passed to RawConfigParser
+        """
         super().__init__(**kwargs)
         
         self.allow_no_value = True
-        self.optionxform = str
+        self.optionxform = str  # Preserve case sensitivity
         
         # Determine config file path
         if not config_file:
+            # Default to script name with .ini extension
             script_path = sys.argv[0] if sys.argv else 'config'
             config_file = os.path.splitext(os.path.realpath(script_path))[0] + ".ini"
         
+        # Ensure .ini extension
         if not config_file.endswith('.ini'):
             config_file += '.ini'
             
-        # Use _config_file_path to avoid property conflict
-        self._config_file_path = Path(config_file).resolve()
-        self.config_name = Path(config_name).resolve() if config_name else self._config_file_path
+        self.config_file = Path(config_file).resolve()
+        self.config_name = Path(config_name).resolve() if config_name else self.config_file
         self._auto_write = auto_write
         
         # Create file if it doesn't exist and auto_write is enabled
-        if not self._config_file_path.exists() and auto_write:
-            self._config_file_path.touch()
+        if not self.config_file.exists() and auto_write:
+            self.config_file.touch()
         
         if config_dir:
+            # Ensure config directory exists
             config_dir_path = Path(config_dir).resolve()
             if not config_dir_path.exists():
                 config_dir_path.mkdir(parents=True, exist_ok=True)
-            self._config_file_path = config_dir_path / self.config_name.name  
+            self.config_file = config_dir_path / self.config_name.name  
                 
         # Load existing configuration
-        if self._config_file_path.exists():
+        if self.config_file.exists():
             self._load_config()
             if os.getenv('SHOW_CONFIGNAME'):
-                _console.print(f":japanese_symbol_for_beginner: [#FFFF00]CONFIG FILE:[/] [bold #00FFFF]{self._config_file_path}[/]")
-
-    @property
-    def filename(self) -> str:
-        """Get absolute path of config file."""
-        return str(self._config_file_path)
-    
-    @property
-    def config_file(self) -> str:
-        """Get absolute path of config file."""
-        return str(self._config_file_path)
-    @property
-    def configname(self) -> str:
-        """Get absolute path of config file."""
-        return str(self._config_file_path)
-
-    def set_config_file(self, config_file: str) -> None:
-        """Change the configuration file and reload."""
-        if config_file and Path(config_file).exists():
-            self._config_file_path = Path(config_file).resolve()  # Fix: use _config_file_path
-            self._load_config()
-        else:
-            _console.print(f":warning: [#FFFF00]Config file not found:[/] [#00FFFF]{config_file}[/]")
-            raise FileNotFoundError(f"Config file not found: {config_file}")
-
+                _console.print(f":japanese_symbol_for_beginner: [#FFFF00]CONFIG FILE:[/] [bold #00FFFF]{self.config_file}[/]")
+        
     def _load_config(self) -> None:
-        """Load configuration from file with specific error handling."""
-        # try:
-        #     self.read(str(self._config_file_path), encoding='utf-8')  # Fix: use _config_file_path
-        # except Exception as e:
-        #     if _debug_enabled():
-        #         _console.print(f":cross_mark: [white on red]Error loading config:[/] [white on blue]{e}[/]")   
+        """Load configuration from file with error handling."""
         try:
-            self.read(str(self._config_file_path), encoding='utf-8')
-        except FileNotFoundError:
-            logger.warning(f"Config file not found: {self._config_file_path}")
-            # Create empty config or use defaults
-        except PermissionError:
-            logger.error(f"Permission denied accessing: {self._config_file_path}")
-            raise ConfigurationError(f"Cannot access config file: {self._config_file_path}")
-        except UnicodeDecodeError as e:
-            logger.error(f"Invalid encoding in config file: {e}")
-            raise ConfigurationError(f"Config file has invalid encoding: {e}")
+            self.read(str(self.config_file), encoding='utf-8')
         except Exception as e:
-            logger.error(f"Unexpected error loading config: {e}")
-            raise ConfigurationError(f"Failed to load configuration: {e}")
+            if _debug_enabled():
+                _console.print(f":cross_mark: [white on red]Error loading config:[/] [white on blue]{e}[/]")
     
     def _save_config(self) -> None:
         """Save current configuration to file."""
         try:
-            with open(self._config_file_path, 'w', encoding='utf-8') as f:  # Fix: use _config_file_path
+            with open(self.config_file, 'w', encoding='utf-8') as f:
                 self.write(f)
         except Exception as e:
             if _debug_enabled():
                 _console.print(f":cross_mark: [white on red]Error saving config:[/] [white on blue]{e}[/]")
+    
+    @property
+    def filename(self) -> str:
+        """Get absolute path of config file."""
+        return str(self.config_file)
+    
+    @property
+    def config_file(self) -> str:
+        """Get absolute path of config file."""
+        return str(self.config_file)
 
-    def print_all_config(self, sections: List[str] = []) -> List[Tuple[str, Dict]]:
-        """Print all configuration in a formatted way."""
-        _console.print(f":japanese_symbol_for_beginner: [bold #FFFF00]CONFIG FILE:[/] [bold #00FFFF]{self._config_file_path}[/]")  # Fix: use _config_file_path
-        
-        data = []
-
-        if not str(self._config_file_path).endswith(".json"):  # Fix: use _config_file_path
-            _console.print(f":japanese_symbol_for_beginner: [bold #FFFF00]CONFIG INI:[/]")
-            data = self.get_all_config(sections)
-            
-            for section_name, section_data in data:
-                self._print_colored(f"[{section_name}]", 'section')
-                for option, value in section_data.items():
-                    self._print_colored(f"  {option} = {value}", 'option', value)
-            
-            print()
-        
-        elif str(self._config_file_path).endswith(".json"):  # Fix: use _config_file_path
-            _console.print(f":llama: [bold #00FFFF]CONFIG JSON:[/] [#bold #FFFF00]{self._config_file_path}[/]")
-            with open(self._config_file_path, 'r') as json_file:  # Fix: use _config_file_path
-                try:
-                    data = json.loads(json_file.read())
-                    if HAS_JSONCOLOR:
-                        jprint(data)
-                    elif HAS_RICH:
-                        print_json(data=data)
-                except Exception as e:
-                    if HAS_RICH:
-                        _console.print_exception(word_wrap=True, theme='fruity', show_locals=False, width=os.get_terminal_size()[0])
-                    else:
-                        print(traceback.format_exc())
-                
-        return data
-
+    def set_config_file(self, config_file: str) -> None:
+        """Change the configuration file and reload."""
+        if config_file and Path(config_file).exists():
+            self.config_file = Path(config_file).resolve()
+            self._load_config()
+        else:
+            _console.print(f":warning: [#FFFF00]Config file not found:[/] [#00FFFF]{config_file}[/]")
+            raise FileNotFoundError(f"Config file not found: {config_file}")
+    
     def get_config(self, section: str, option: str, 
-                  default: Any = None, auto_write: bool = False) -> Any:
+                  default: Any = None, auto_write: bool = False, value: Any = None) -> Any:
         """
         Get configuration value with automatic type conversion.
         
@@ -1046,10 +954,13 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
             option: Configuration option name  
             default: Default value if option doesn't exist
             auto_write: Override instance auto_write setting, default `False`
+            value: Alternative way to provide default value
             
         Returns:
             Configuration value with appropriate type conversion
         """
+        if value: 
+            default = value
         if auto_write is None:
             auto_write = self._auto_write
             
@@ -1083,6 +994,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         return self.get_config(section, option, default, auto_write)
 
     def read_config(self, *args, **kwargs):
+        """Alias for get_config."""
         return self.get_config(*args, **kwargs)
     
     def write_config(self, section: str, option: str, value: Any = '') -> Any:
@@ -1129,7 +1041,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         """
         return self.write_config(section, option, value)
     
-    def remove_config(self, section: str, option: str = '') -> bool:
+    def remove_config(self, section: str, option: str = None) -> bool:
         """
         Remove configuration section or specific option.
         
@@ -1142,7 +1054,6 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         Returns:
             True if successfully removed, False if section/option not found
         """
-        # print(f"section: {section}, option: {option}")
         try:
             if option is None:
                 # Remove entire section
@@ -1150,11 +1061,11 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
                     super().remove_section(section)
                     self._save_config()
                     if _debug_enabled():
-                        print(f"Removed section: [{section}]")
+                        _console.print(f":loudspeaker: [bold #FFFF00]Removed section:[/] [white on blue]{section}[/]")
                     return True
                 else:
                     if _debug_enabled():
-                        print(f"Section not found: [{section}]")
+                        _console.print(f":cross_mark: [white on red]Section not found:[/] [white on blue]{section}[/]")
                     return False
             else:
                 # Remove specific option from section
@@ -1163,26 +1074,28 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
                         super().remove_option(section, option)
                         self._save_config()
                         if _debug_enabled():
-                            print(f"Removed option: [{section}] {option}")
+                            _console.print(f":loudspeaker: [bold #FFFF00]Removed option:[/] [white on blue]{section}[/] {option}")
                         return True
                     else:
                         if _debug_enabled():
-                            print(f"Option not found: [{section}] {option}")
+                            _console.print(f":cross_mark: [white on red]Option not found:[/] [white on blue]{section}[/] {option}")
                         return False
                 else:
                     if _debug_enabled():
-                        print(f"Section not found: [{section}]")
+                        _console.print(f":cross_mark: [white on red]Section not found:[/] [white on blue]{section}[/]")
                     return False
         except Exception as e:
             if _debug_enabled():
-                print(f"Error removing config: {e}")
+                _console.print(f":cross_mark: [white on red]Error removing config:[/] [white on blue]{e}[/]")
             return False
 
     def remove_section(self, section: str) -> bool:
+        """Remove entire section."""
         return self.remove_config(section)
     
     def get_config_as_list(self, section: str, option: str, 
-                          default: Union[str, List] = None) -> List[Any]:
+                          default: Union[str, List] = None, 
+                          value: Union[str, List] = None) -> List[Any]:
         """
         Get configuration value as a list, parsing various formats.
         
@@ -1196,10 +1109,13 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
             section: Configuration section name
             option: Configuration option name
             default: Default value if option doesn't exist
+            value: Alternative way to provide default value
             
         Returns:
             List of parsed values with type conversion
         """
+        if value: 
+            default = value
         if default is None:
             default = []
         elif isinstance(default, str):
@@ -1237,7 +1153,8 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         return default if isinstance(default, list) else [default]
     
     def get_config_as_dict(self, section: str, option: str, 
-                          default: Dict = None) -> Dict[str, Any]:
+                          default: Dict = None, 
+                          value: Dict = None) -> Dict[str, Any]:
         """
         Get configuration value as dictionary, parsing key:value pairs.
         
@@ -1249,10 +1166,13 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
             section: Configuration section name
             option: Configuration option name
             default: Default dictionary if option doesn't exist
+            value: Alternative way to provide default value
             
         Returns:
             Dictionary with parsed key-value pairs
         """
+        if value: 
+            default = value
         if default is None:
             default = {}
             
@@ -1323,11 +1243,11 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
                             self._print_colored(f"  {option} = {value}", 'option', value)
             except Exception:
                 if _debug_enabled():
-                    print(f"Error searching section {section_name}: {traceback.format_exc()}")
-        
+                    _console.print(f":cross_mark: [white on red]Error searching section[/] [white on blue]{section_name}[/]: {traceback.format_exc()}")
+
         return len(found) > 0
     
-    def get_all_config(self, sections: List[str] = []) -> List[Tuple[str, Dict]]:
+    def get_all_config(self, sections: List[str] = None) -> List[Tuple[str, Dict]]:
         """
         Get all configuration data, optionally filtered by sections.
         
@@ -1351,7 +1271,42 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
             result.append((section_name, section_data))
         
         return result
+    
+    def print_all_config(self, sections: List[str] = None) -> List[Tuple[str, Dict]]:
+        """Print all configuration in a formatted way."""
+        _console.print(f":japanese_symbol_for_beginner: [bold #FFFF00]CONFIG FILE:[/] [bold #00FFFF]{self.config_file}[/]")
         
+        data = []
+
+        if not str(self.config_file).endswith(".json"):
+            _console.print(f":japanese_symbol_for_beginner: [bold #FFFF00]CONFIG INI:[/]")
+            data = self.get_all_config(sections)
+            
+            for section_name, section_data in data:
+                self._print_colored(f"[{section_name}]", 'section')
+                for option, value in section_data.items():
+                    self._print_colored(f"  {option} = {value}", 'option', value)
+            
+            print()  # Empty line at the end
+        
+        elif str(self.config_file).endswith(".json"):
+            _console.print(f":llama: [bold #00FFFF]CONFIG JSON:[/] [#bold #FFFF00]{self.config_file}[/]")
+            with open(self.config_file, 'r') as json_file:
+                try:
+                    data = json.loads(json_file.read())
+
+                    if HAS_JSONCOLOR:
+                        jprint(data)
+                    elif HAS_RICH:
+                        print_json(data=data)
+                except Exception as e:
+                    if HAS_RICH:
+                        _console.print_exception(word_wrap=True, theme='fruity', show_locals=False, width=os.get_terminal_size()[0])
+                    else:
+                        print(traceback.format_exc())
+                
+        return data
+    
     def _convert_value(self, value: str) -> Any:
         """Convert string value to appropriate Python type."""
         if not isinstance(value, str):
@@ -1379,7 +1334,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         # Return as string
         return value
     
-    def _print_colored(self, text: str, element_type: str, value: str = '') -> None:
+    def _print_colored(self, text: str, element_type: str, value: str = None) -> None:
         """Print text with colors if available."""
         if element_type == 'section':
             if HAS_RICH:
