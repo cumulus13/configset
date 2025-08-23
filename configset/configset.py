@@ -1432,70 +1432,186 @@ class ConfigSet:
 class configset(ConfigSet):
     pass
 
+# class ConfigMeta1(type):
+#     """Metaclass for creating class-based configuration interfaces."""
+    
+#     def __new__(mcs, name, bases, attrs):
+#         # Initialize config instance
+#         config_file = attrs.get('CONFIGFILE') or attrs.get('configname')
+        
+#         if 'config' in attrs and hasattr(attrs['config'], 'set_config_file'):
+#             config_instance = attrs['config']
+#             if config_file:
+#                 config_instance.set_config_file(config_file)
+#         else:
+#             config_instance = ConfigSet(config_file)
+        
+#         attrs['_config_instance'] = config_instance
+        
+#         # Wrap methods to work as classmethods
+#         def make_classmethod(method):
+#             @wraps(method)
+#             def wrapper(cls, *args, **kwargs):
+#                 return method(cls._config_instance, *args, **kwargs)
+#             return classmethod(wrapper)
+        
+#         # Convert ConfigSet methods to classmethods
+#         for base in bases:
+#             for attr_name, attr_value in base.__dict__.items():
+#                 if (callable(attr_value) and 
+#                     not attr_name.startswith('__') and 
+#                     attr_name not in attrs):
+#                     attrs[attr_name] = make_classmethod(attr_value)
+        
+#         return super().__new__(mcs, name, bases, attrs)
+    
+#     def __getattr__(cls, name):
+#         """Delegate attribute access to config instance."""
+#         if hasattr(cls._config_instance, name):
+#             attr = getattr(cls._config_instance, name)
+#             if callable(attr):
+#                 return lambda *args, **kwargs: attr(*args, **kwargs)
+#             return attr
+        
+#         if hasattr(cls, 'data') and name in cls.data:
+#             return cls.data[name]
+            
+#         raise AttributeError(f"'{cls.__name__}' has no attribute '{name}'")
+    
+#     def __setattr__(cls, name, value):
+#         """Handle attribute assignment."""
+#         if name in ['configname', 'CONFIGNAME', 'CONFIGFILE']:
+#             cls._config_instance.set_config_file(value)
+#         else:
+#             if os.getenv('DEBUG') in ['1', 'true', 'True']: print("Saving ....")
+#             super().__setattr__(name, value)
+
+#     def show(cls):
+#         """Show current configuration."""
+        
+#         if hasattr(cls, '_config_instance'):
+#             return cls._config_instance.print_all_config()
+#         else:
+#             _console.print(":cross_mark: [white on red]No config instance found.[/]")
+#             return None
+
+# ...existing code...
 class ConfigMeta(type):
     """Metaclass for creating class-based configuration interfaces."""
     
     def __new__(mcs, name, bases, attrs):
-        # Initialize config instance
-        config_file = attrs.get('CONFIGFILE') or attrs.get('configname')
-        config_json = attrs.get('_json_file')
-        
+        # Determine config file name from class attributes (if provided)
+        config_file = attrs.get('CONFIGFILE') or attrs.get('configname') or ''
+
+        # If caller provided a pre-instantiated `config` object that supports set_config_file => use it
         if 'config' in attrs and hasattr(attrs['config'], 'set_config_file'):
             config_instance = attrs['config']
             if config_file:
-                config_instance.set_config_file(config_file)
+                try:
+                    config_instance.set_config_file(config_file)
+                except Exception:
+                    pass
         else:
+            # let ConfigSet detect the proper backend (INI / JSON / YAML)
             config_instance = ConfigSet(config_file)
-        
+
+        # store instance for class and instance usage
         attrs['_config_instance'] = config_instance
-        
-        # Wrap methods to work as classmethods
-        def make_classmethod(method):
-            @wraps(method)
+
+        # helper to build a classmethod proxy to an instance method
+        def make_classmethod_from_instance(method_name):
             def wrapper(cls, *args, **kwargs):
-                return method(cls._config_instance, *args, **kwargs)
+                inst = getattr(cls, '_config_instance')
+                method = getattr(inst, method_name)
+                return method(*args, **kwargs)
+            wrapper.__name__ = method_name
             return classmethod(wrapper)
-        
-        # Convert ConfigSet methods to classmethods
-        for base in bases:
-            for attr_name, attr_value in base.__dict__.items():
-                if (callable(attr_value) and 
-                    not attr_name.startswith('__') and 
-                    attr_name not in attrs):
-                    attrs[attr_name] = make_classmethod(attr_value)
-        
+
+        # expose public callable attributes of the instance as classmethods
+        for name in dir(config_instance):
+            if name.startswith('_'):
+                continue
+            if name in attrs:
+                continue
+            try:
+                attr = getattr(config_instance, name)
+            except Exception:
+                continue
+            if callable(attr):
+                attrs[name] = make_classmethod_from_instance(name)
+
         return super().__new__(mcs, name, bases, attrs)
-    
+
     def __getattr__(cls, name):
-        """Delegate attribute access to config instance."""
-        if hasattr(cls._config_instance, name):
+        """Delegate attribute access to config instance (methods/properties)."""
+        if hasattr(cls, '_config_instance') and hasattr(cls._config_instance, name):
             attr = getattr(cls._config_instance, name)
             if callable(attr):
+                # return a wrapper that calls the instance method
                 return lambda *args, **kwargs: attr(*args, **kwargs)
             return attr
-        
+
         if hasattr(cls, 'data') and name in cls.data:
             return cls.data[name]
             
         raise AttributeError(f"'{cls.__name__}' has no attribute '{name}'")
+
+    # def __setattr__(cls, name, value):
+    #     """Handle attribute assignment."""
+    #     if name in ['configname', 'CONFIGNAME', 'CONFIGFILE']:
+    #         # delegate change of file to instance so backend can reload
+    #         if hasattr(cls, '_config_instance') and hasattr(cls._config_instance, 'set_config_file'):
+    #             cls._config_instance.set_config_file(value)
+    #         else:
+    #             super().__setattr__(name, value)
+    #     else:
+    #         if os.getenv('DEBUG') in ['1', 'true', 'True']:
+    #             print("Saving ....")
+    #         super().__setattr__(name, value)
     
+    # ...existing code...
     def __setattr__(cls, name, value):
         """Handle attribute assignment."""
         if name in ['configname', 'CONFIGNAME', 'CONFIGFILE']:
-            cls._config_instance.set_config_file(value)
-        else:
-            if os.getenv('DEBUG') in ['1', 'true', 'True']: print("Saving ....")
+            # When the class config filename changes, replace the backend instance
+            # so the proper ConfigSet backend (INI/JSON/YAML) is used.
+            if value:
+                try:
+                    new_inst = ConfigSet(value)
+                    cls._config_instance = new_inst
+                    return
+                except Exception:
+                    # Fall back to asking existing instance to change file if possible
+                    inst = getattr(cls, '_config_instance', None)
+                    if inst is not None and hasattr(inst, 'set_config_file'):
+                        try:
+                            inst.set_config_file(value)
+                            return
+                        except Exception:
+                            pass
+            # If all else fails, set attribute normally
             super().__setattr__(name, value)
+            return
+
+        if os.getenv('DEBUG') in ['1', 'true', 'True']:
+            print("Saving ....")
+        super().__setattr__(name, value)
 
     def show(cls):
         """Show current configuration."""
-        
         if hasattr(cls, '_config_instance'):
-            return cls._config_instance.print_all_config()
+            # prefer unified method names if available
+            inst = cls._config_instance
+            if hasattr(inst, 'print_all_config'):
+                return inst.print_all_config()
+            if hasattr(inst, 'show'):
+                return inst.show()
+            if hasattr(inst, 'print'):
+                return inst.print()
         else:
             _console.print(":cross_mark: [white on red]No config instance found.[/]")
             return None
-
+        
 class CONFIG(metaclass=ConfigMeta):
     """
     Class-based configuration interface providing INI, JSON, and YAML support.
