@@ -96,7 +96,10 @@ def get_long_description():
 def get_requirements():
     """Get requirements based on Python version."""
     requirements = []
-    
+    filename = os.path.join(os.path.dirname(os.path.realpath(__file__)), "requirements.txt")
+    with open(filename, "r", encoding="utf-8") as f:
+        requirements.extend(line.strip() for line in f if line.strip() and not line.startswith("#"))
+
     # Only add configparser for Python 2.7
     if sys.version_info < (3, 0):
         requirements.append('configparser')
