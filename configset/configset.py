@@ -2741,7 +2741,8 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
                   default: Any = None, auto_write: bool = False) -> Any:
         """
         Get configuration value with automatic type conversion.
-        
+        This method retrieves a configuration value, applying type conversion as needed.
+
         Args:
             section: Configuration section name
             option: Configuration option name  
@@ -2772,6 +2773,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
              default: Any = None, auto_write: bool = True) -> Any:
         """
         Alias for get_config to maintain compatibility with previous versions.
+        this method defaults auto_write to True.
         
         Args:
             section: Configuration section name
