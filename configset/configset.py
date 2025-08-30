@@ -11,6 +11,7 @@ Provides easy-to-use configuration file handling with INI, JSON, and YAML suppor
 
 from __future__ import annotations
 import warnings
+import inspect
 import sys
 import argparse
 import os
@@ -57,6 +58,7 @@ try:
     from rich import print_json
     from rich.console import Console
     from rich import traceback as rich_traceback # type: ignore
+    from rich.syntax import Syntax
     _console = Console() # type: ignore
     HAS_RICH = True
 except ImportError:
@@ -2511,7 +2513,10 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         """
         The function `_load_config` loads configuration from a file with specific error handling.
         """
-        
+
+        if _debug_enabled():
+            print(f"Loading config from: {self._config_file_path}, IS_FILE: {os.path.isfile(self._config_file_path)}")
+            
         try:
             self.read(str(self._config_file_path), encoding='utf-8')
         except FileNotFoundError:
@@ -2544,18 +2549,12 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         Print the entire configuration in a human-readable, colorized format and return the parsed data.
         This method inspects the instance attribute self._config_file_path to determine the file
         type and prints the configuration to the console in a friendly way:
-        - For INI-style files (anything not ending with ".json"):
+        - For INI-style files (anything not ending with ".ini"):
             - Calls self.get_all_config(sections) to obtain configuration as a list of
                 (section_name, section_data) tuples.
             - Prints a header and each section using self._print_colored for consistent
                 colorized formatting.
             - Returns the list of (section_name, section_data) tuples.
-        - For JSON files (file path ends with ".json"):
-            - Opens and reads the JSON file, attempts to parse it with json.loads.
-            - If specialized formatters are available (HAS_JSONCOLOR or HAS_RICH) they are
-                used to pretty-print the JSON; otherwise standard traceback output is used
-                on parse errors.
-            - Returns the parsed JSON structure (commonly a dict or a list).
         Parameters
         ----------
         sections : List[str], optional
@@ -2568,7 +2567,6 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         List[Tuple[str, Dict]] or Any
                 - For INI files: a list of (section_name, section_data) tuples where
                     section_data is a mapping of option names to values.
-                - For JSON files: the parsed JSON object (typically a dict or list).
                 The exact returned type therefore depends on the configuration file format.
         Side effects
         ------------
@@ -2577,52 +2575,168 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         - Calls self.get_all_config when handling INI files.
         Exceptions
         ----------
-        - JSON decoding errors are caught and their tracebacks are printed (using rich
-            if available). File I/O errors (e.g. FileNotFoundError, PermissionError) that
-            occur when opening the JSON file are not explicitly caught by this method and
-            may propagate to the caller.
         - Other exceptions raised by helper methods (e.g. self.get_all_config or
             self._print_colored) may also propagate.
         Examples
         --------
         # Print entire INI config, limiting to specified sections:
         print_all_config(['default', 'logging'])
-        # Print parsed JSON config (and pretty-print it to the terminal when supported):
-        print_all_config()
         """
         
         _console.print(f":japanese_symbol_for_beginner: [bold #FFFF00]CONFIG FILE:[/] [bold #00FFFF]{self._config_file_path}[/]")  # Fix: use _config_file_path
         
-        data = []
-
-        if not str(self._config_file_path).endswith(".json"):  # Fix: use _config_file_path
-            _console.print(f":japanese_symbol_for_beginner: [bold #FFFF00]CONFIG INI:[/]")
+        _console.print(f":japanese_symbol_for_beginner: [bold #FFFF00]CONFIG INI:[/]")
+        if _debug_enabled():
+            print(f"self.config_file: {self.config_file}, IS_FILE: {os.path.isfile(self.config_file)}")
+        if HAS_RICH and self.config_file and Path(self.config_file).exists():
+            with open(self._config_file_path, 'r') as ini_file:
+                syntax = Syntax(ini_file.read(), lexer='ini', theme='fruity')
+                _console.print(syntax)
+        else:
             data = self.get_all_config(sections)
-            
+            if _debug_enabled(): print(f"data: {data}")
+
             for section_name, section_data in data:
                 self._print_colored(f"[{section_name}]", 'section')
                 for option, value in section_data.items():
                     self._print_colored(f"  {option} = {value}", 'option', value)
-            
-            print()
         
-        elif str(self._config_file_path).endswith(".json"):  # Fix: use _config_file_path
-            _console.print(f":llama: [bold #00FFFF]CONFIG JSON:[/] [#bold #FFFF00]{self._config_file_path}[/]")
-            with open(self._config_file_path, 'r') as json_file:  # Fix: use _config_file_path
-                try:
-                    data = json.loads(json_file.read())
-                    if HAS_JSONCOLOR:
-                        jprint(data)
-                    elif HAS_RICH:
-                        print_json(data=data)
-                except Exception as e:
-                    if HAS_RICH:
-                        _console.print_exception(word_wrap=True, theme='fruity', show_locals=False, width=os.get_terminal_size()[0]) # type: ignore
-                    else:
-                        print(traceback.format_exc())
-                
-        return data
+        # print()
+        
+        return self.get_all_config()
+    
+    def show(self, *args, **kwargs):
+        """Prints all configurations.
 
+        Args:
+            self(object): The object containing the configuration data.
+            args(tuple): Additional positional arguments to be passed to print_all_config.
+            kwargs(dict): Additional keyword arguments to be passed to print_all_config.
+
+        Returns:
+            None: This function does not return any value.
+
+        Raises:
+            Exception: Any exception raised by print_all_config will be propagated.
+        """
+        
+        return self.print_all_config(*args, **kwargs)
+        
+    def get_section(self, section: str):
+        """
+        Return all options and values in a section as {section: {option: value, ...}}.
+        If section does not exist, print error and return None.
+        """
+        if self.has_section(section):
+            options = {opt: self.get_config(section, opt) for opt in self.options(section)}
+            return {section: options}
+        else:
+            _console.print(f":x: [white on red]No section[/] [white on blue]'{section}'[/] [white on red]found ![/]")
+            return None
+
+    def print(self, section: str = '', option: str = '', default: str = '') -> Any:
+        """
+        Print configuration values to the configured console and return the requested data.
+
+        Behavior:
+        - If both `section` and `option` are provided:
+            - Calls self.get_config(section, option, default, False).
+            - Prints a single-line section header and the option/value pair:
+                [<section>]
+                  <option> = <value>
+            - Returns the resolved value (or the `default` when get_config falls back).
+
+        - If only `section` is provided:
+            - Calls self.get_section(section) to retrieve all options for that section.
+            - For each matching section (key) and its options (mapping), prints:
+                [<section_key>]
+                  <opt> = <val>
+            - Returns the mapping returned by get_section (typically a dict of section -> {option: value}).
+            - If no section is found, returns None and prints nothing.
+
+        - If only `option` is provided:
+            - Calls self.find(option) to locate that option across sections.
+            - For each matching section (key) and its options (mapping), prints:
+                [<section_key>]
+                  <opt> = <val>
+            - Returns the mapping returned by find (typically a dict of section -> {option: value}).
+            - If nothing is found, returns None and prints nothing.
+
+        - If neither `section` nor `option` is provided:
+            - The method performs no action and returns None.
+
+        Parameters
+        - section (str): Name of the section to print or search within. Optional; default is ''.
+        - option (str): Name of the option to print or search for. Optional; default is ''.
+        - default (str): Fallback value used only when both section and option are provided and get_config cannot find a value.
+
+        Returns
+        - When both section and option are provided: the single configuration value (type depends on stored value).
+        - When a section or an option search is performed: a dict mapping section names to option dictionaries, or None if nothing found.
+        - None when nothing is requested (both parameters empty) or when no data is found for section/option queries.
+
+        Notes
+        - Output is written via the module's console object (internal _console.print) and formatted as shown above.
+        - This method does not raise on missing data; it returns default (for get_config) or None for section/find misses.
+
+        Examples
+        1) Print a single option value (returns the value):
+        >>> # Suppose get_config('database', 'host', 'localhost', False) -> 'db.example.com'
+        >>> cfg.print('database', 'host')
+        [database]
+          host = db.example.com
+        # Returns: 'db.example.com'
+
+        2) Print all options for a section (returns a dict):
+        >>> # Suppose get_section('logging') -> {'logging': {'level': 'INFO', 'file': '/var/log/app.log'}}
+        >>> cfg.print('logging')
+        [logging]
+          level = INFO
+          file = /var/log/app.log
+        # Returns: {'logging': {'level': 'INFO', 'file': '/var/log/app.log'}}
+
+        3) Find and print an option across all sections (returns a dict):
+        >>> # Suppose find('timeout') -> {'network': {'timeout': '30'}, 'database': {'timeout': '60'}}
+        >>> cfg.print(option='timeout')
+        [network]
+          timeout = 30
+        [database]
+          timeout = 60
+        # Returns: {'network': {'timeout': '30'}, 'database': {'timeout': '60'}}
+
+        4) Missing data behavior:
+        >>> cfg.print('nosuch', 'key')
+        # If get_config falls back to default 'x', prints:
+        [nosuch]
+          key = x
+        # Returns: 'x'
+        >>> cfg.print('no-section')
+        # If get_section('no-section') returns None, prints nothing and returns None
+        """
+        
+        if section and option:
+            value = self.get_config(section, option, default, False)
+            _console.print(f"[{section}]\n  {option} = {value}")
+            return value
+        elif section and not option:
+            section_found = self.get_section(section)
+            if section_found:
+                for sec, opts in section_found.items():
+                    _console.print(f"[{sec}]")
+                    for opt, val in opts.items():
+                        _console.print(f"  {opt} = {val}")
+            return section_found
+        elif not section and option:
+            data_found = self.find(option)
+            if data_found:
+                for sec, opts in data_found.items():
+                    _console.print(f"[{sec}]")
+                    for opt, val in opts.items():
+                        _console.print(f"  {opt} = {val}")
+            return data_found
+        else:
+            return self.print_all_config()
+        
     def get_config(self, section: str, option: str, 
                   default: Any = None, auto_write: bool = False) -> Any:
         """
@@ -2939,7 +3053,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
                 if _debug_enabled():
                     print(f"Error searching section {section_name}: {traceback.format_exc()}")
         
-        return len(found) > 0
+        return found
     
     def get_all_config(self, sections: List[str] = []) -> List[Tuple[str, Dict]]:
         """
@@ -3037,6 +3151,10 @@ class ConfigSet:
         """
         Initialize ConfigSet instance.
         
+        If no config_file provided, or provided path does not exist, create a default file
+        next to the parent module that imported this package (caller). Default format is JSON
+        (filename: <caller_stem>.json) unless extension provided.
+        
         Args:
             config_file: Path to configuration file
             auto_write: Whether to automatically create missing files/sections
@@ -3048,7 +3166,59 @@ class ConfigSet:
         file_path = config_file or ''
         if config_dir:
             file_path = os.path.join(config_dir, config_name or config_file)
-        file_type = detect_file_type(file_path)
+        
+         # If no path provided, derive from caller module (the importer)
+        if not file_path:
+            caller_file = None
+            for frame_info in inspect.stack()[1:]:
+                try:
+                    module = inspect.getmodule(frame_info.frame)
+                except Exception:
+                    module = None
+                # choose first frame outside this module
+                if module and module.__name__ != __name__:
+                    caller_file = Path(frame_info.filename).resolve()
+                    break
+            if caller_file:
+                default_name = caller_file.stem + ".json"
+                file_path = str(caller_file.parent / default_name)
+            else:
+                # fallback to cwd/config.json
+                file_path = str(Path.cwd() / "config.json")
+
+        # If given path is a directory, place config file inside it
+        p = Path(file_path)
+        if p.is_dir():
+            name = config_name or (Path(sys.argv[0]).stem if sys.argv and sys.argv[0] else "config")
+            p = p / f"{name}.json"
+            file_path = str(p)
+
+        # Ensure parent dir exists and create file if missing
+        try:
+            p = Path(file_path)
+            if not p.parent.exists():
+                p.parent.mkdir(parents=True, exist_ok=True)
+            if not p.exists():
+                # create minimal content based on suffix
+                ext = p.suffix.lower()
+                if ext in (".yaml", ".yml"):
+                    p.write_text("{}", encoding="utf-8")
+                elif ext == ".ini":
+                    p.write_text("", encoding="utf-8")
+                else:
+                    # default to JSON
+                    p.write_text("{}", encoding="utf-8")
+        except Exception:
+            # ignore creation errors here, downstream code will raise if truly invalid
+            pass
+
+        # Detect file type (prefer content detection, fallback to extension, default json)
+        file_type = detect_file_type(str(p)) or (
+            "yaml" if p.suffix.lower() in (".yaml", ".yml") else
+            "ini" if p.suffix.lower() == ".ini" else
+            "json"
+        )
+        
         if file_type == 'json':
             return ConfigSetJSON(json_file=file_path, **kwargs)
         if file_type in ('yaml', 'yml'):
