@@ -15,6 +15,7 @@ import inspect
 import sys
 import argparse
 import os
+import ast
 import traceback
 import re
 import json
@@ -2830,35 +2831,169 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
             ValueError: Raised when the configuration file is invalid.
         """
         return self.get_config(*args, **kwargs)
-    
-    def write_config(self, section: str, option: str, value: Any = '') -> Any:
+
+    def write_config(self, section: str, option: str = '', value: Any = '') -> Any:
         """
-        Write configuration value to file.
+        Write or update a configuration value in the INI-backed ConfigSet.
+        This method accepts a variety of input types and normalizes them before
+        writing into the underlying INI-like configuration store. It guarantees the
+        section exists, converts many Python types to appropriate string representations,
+        and can expand dictionary values into multiple options.
+        Behavior summary
+        - Ensures the requested section exists (adds it if missing).
+        - Converts bytes values to UTF-8 strings.
+        - For list values (or string representations of lists), joins the elements by
+            a single space and stores the result as a single option value.
+        - For dict values (or JSON string representations of dicts), writes each dict
+            key as a separate option in the same section (value becomes option value).
+            Only 1-level dicts are supported; nested dicts trigger a warning but the
+            top-level keys are still written individually.
+        - For string values that look like a list (starts with "[" and ends with "]"),
+            attempts ast.literal_eval() to parse into a list before joining.
+        - For string values that look like a dict (starts with "{" and ends with "}"),
+            attempts json.loads() to parse into a dict before expanding into multiple
+            options.
+        - None is treated as an empty string.
+        - Any parsing failures emit UserWarning and (if enabled) debug console messages;
+            the original value is written as-is when parsing fails.
+        - The configuration is saved by calling self._save_config() before returning.
+        - The method returns the stored value via self.get_config(section, option).
+        Parameters
+        - section (str): The INI section name to write into. If missing, it will be created.
+        - option (str): The option name for single-value writes. When value is a dict
+            (or parsed dict), this parameter is used only as the logical origin; each
+            dict key becomes an option name under `section`.
+        - value (Any, optional): Value to store. Supported types:
+                - None -> written as empty string.
+                - bytes -> decoded as UTF-8 string.
+                - str -> stored as-is, except when it appears to be a serialized list or
+                    JSON object (see rules above), in which case it will be parsed and
+                    handled accordingly.
+                - list -> elements joined by a single space and written as one option.
+                - dict -> each top-level key/value pair becomes an option/value in `section`.
+                    Nested dicts are not supported (depth > 1 triggers a warning but keys are
+                    still written individually).
+        Returns
+        - Any: The value read back from the configuration using self.get_config(section, option).
+            Note: when a dict was provided (or parsed) multiple options are written; the
+            returned value corresponds to the provided `option` key (which may be absent
+            if the dict did not include it).
+        Warnings and side-effects
+        - Emits UserWarning for parse failures, nested dicts, or other recoverable issues.
+        - Option and section creation/modification are performed in-place.
+        - Calls self._save_config() to persist changes.
+        - Emits debug output via internal debug/console helpers when enabled.
+        Examples
+        - Write a simple string:
+                >>> config.write_config('server', 'host', 'example.com')
+        - Write a list (stored as space-separated string):
+                >>> config.write_config('paths', 'modules', ['mod1', 'mod2', 'mod3'])
+                # stored as: "mod1 mod2 mod3"
+        - Write a stringified list (parsed and stored as above):
+                >>> config.write_config('paths', 'modules', "['mod1', 'mod2']")
+        - Write a single option with bytes:
+                >>> config.write_config('auth', 'token', b'secret')
+        - Write a dict (each key becomes an option in the section):
+                >>> config.write_config('db', 'unused_option', {'host': 'localhost', 'port': 5432})
+                # results: section [db] contains options host=localhost and port=5432
+        - Write a JSON string representing a dict:
+                >>> config.write_config('db', 'unused', '{"user":"alice","pwd":"s3cr3t"}')
+        Notes
+        - When passing a dict, the `option` argument is not used to group the dict;
+            instead dict keys become option names. If you need to store a dict as a single
+            option, serialize it yourself (e.g., as JSON) and provide it as a string value.
+        - to ensure dict as valid section-option then use dict with 1 level instead of nested dict.
+        """
         
-        Args:
-            section: Configuration section name
-            option: Configuration option name
-            value: Value to write
-            
-        Returns:
-            The written value
-        """
+        def _write(section, option, value):
+            # Convert value to string for storage
+            str_value = str(value) if value is not None else ''
+            # super().set(section, option, str_value)
+            try:
+                super().set(section, option, str_value)
+            except configparser.NoSectionError:
+                super().add_section(section)
+                super().set(section, option, str_value)
+            except configparser.NoOptionError:
+                super().set(section, option, str_value)
+        
+        # ensure dict is only 1-level deep
+        def _dict_depth(d):
+            if not isinstance(d, dict):
+                return 0
+            max_child = 0
+            for v in d.values():
+                if isinstance(v, dict):
+                    max_child = max(max_child, _dict_depth(v))
+            return 1 + max_child
+
         if not self.has_section(section):
             self.add_section(section)
+        
+        if value is None:
+            value = ''
+        
+        if isinstance(value, bytes):
+            value = value.decode('utf-8')
+        if isinstance(value, list):
+            value = " ".join(value)
+            _write(section, option, value)
+        elif isinstance(value, str) and value.strip().startswith("[") and value.strip().endswith("]"):
+            try:
+                value = ast.literal_eval(value)
+                value = " ".join(value)
+                _write(section, option, value)
+            except Exception as e:
+                if _debug_enabled():
+                    _console.print(f":warning: [bold #00FFFF]ConfigSetIni:[/] [white on red]Failed to parse list[/] [white on blue]{section}:{option}[/] -> [white on red]{e}[/]")
+                warnings.warn(f"ConfigSetIni: Failed to parse list for INI value: {e}", UserWarning)
+                _write(section, option, value)
+                
+        elif isinstance(value, str) and value.strip().startswith("{") and value.strip().endswith("}"):
+            # Attempt to parse stringified dict
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, dict) and _dict_depth(parsed) == 1:
+                    value = parsed
+                    for key in value:
+                        _write(section, key, value[key])
+                elif isinstance(parsed, dict) and _dict_depth(parsed) > 1:
+                    msg = "INI value must be a 1-level dict (no nested dicts)."
+                    if _debug_enabled():
+                        _console.print(f":warning: [white on red]{msg}[/] [white on blue]{section}:{option}[/]")
+                    warnings.warn(msg + ", write as it is", UserWarning)
+                    for key in parsed:
+                        _write(section, key, parsed[key])
+                else:
+                    msg = "INI value not a valid dictionary."
+                    if _debug_enabled():
+                        _console.print(f":warning: [white on red]{msg}[/] [white on blue]{section}:{option}[/]")
+                    warnings.warn(msg + ", write as it is", UserWarning)
+                    _write(section, option, value)
+            except json.JSONDecodeError:
+                if _debug_enabled():
+                    _console.print(f":warning: [bold #00FFFF]ConfigSetIni:[/] [white on red]Failed to parse JSON[/] [white on blue]{section}:{option}[/]")
+                warnings.warn("ConfigSetIni: Failed to parse JSON for INI value", UserWarning)
+            except Exception as e:
+                if _debug_enabled():
+                    _console.print(f":warning: [bold #00FFFF]ConfigSetIni:[/] [white on red]Failed to process value[/] [white on blue]{section}:{option}[/]")
+                warnings.warn(f"ConfigSetIni: Failed to process INI value: {e}", UserWarning)
+                
+        elif isinstance(value, dict):
             
-        # Convert value to string for storage
-        str_value = str(value) if value is not None else ''
-        # super().set(section, option, str_value)
-        try:
-            super().set(section, option, str_value)
-        except configparser.NoSectionError:
-            super().add_section(section)
-            super().set(section, option, str_value)
-        except configparser.NoOptionError:
-            super().set(section, option, str_value)
+            if _dict_depth(value) > 1:
+                msg = "INI value must be a 1-level dict (no nested dicts)."
+                if _debug_enabled():
+                    _console.print(f":warning: [white on red]{msg}[/] [white on blue]{section}:{option}[/]")
+                warnings.warn(msg + ", write as it is", UserWarning)
+                for key in value:
+                    _write(section, key, value[key])
+            else:
+                for key in value:
+                    _write(section, key, value[key])
 
         self._save_config()
-        
+
         return self.get_config(section, option)
     
     def set(self, section: str, option: str, value: Any = '') -> Any:
@@ -2993,8 +3128,8 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
             return result
         
         return default if isinstance(default, list) else [default]
-    
-    def get_config_as_dict(self, section: str, option: str, 
+
+    def get_config_as_dict(self, section: str, option: str,
                           default: Dict = None) -> Dict[str, Any]: # type: ignore
         """
         Get configuration value as dictionary, parsing key:value pairs.
@@ -3493,19 +3628,6 @@ class ConfigMeta(type):
             
         raise AttributeError(f"'{cls.__name__}' has no attribute '{name}'")
 
-    # def __setattr__(cls, name, value):
-    #     """Handle attribute assignment."""
-    #     if name in ['configname', 'CONFIGNAME', 'CONFIGFILE']:
-    #         # delegate change of file to instance so backend can reload
-    #         if hasattr(cls, '_config_instance') and hasattr(cls._config_instance, 'set_config_file'):
-    #             cls._config_instance.set_config_file(value)
-    #         else:
-    #             super().__setattr__(name, value)
-    #     else:
-    #         if os.getenv('DEBUG') in ['1', 'true', 'True']:
-    #             print("Saving ....")
-    #         super().__setattr__(name, value)
-    
     def __setattr__(cls, name, value):
         """Sets an attribute in the class, handling special cases for configuration file names.
 
@@ -3659,25 +3781,10 @@ class CONFIG(metaclass=ConfigMeta):
         
         if config_file:
             self.config = ConfigSet(config_file)
+        elif self.CONFIGFILE:
+            self.config = ConfigSet(config_file)
+            self.config_file = self.CONFIGFILE
         
-        # Setup JSON file for attribute-based access
-        if self.CONFIGFILE:
-            json_file = Path(self.CONFIGFILE).with_suffix('.json')
-            self._json_file = json_file
-            
-            # Load existing JSON data
-            if json_file.exists():
-                try:
-                    with open(json_file, 'r', encoding='utf-8') as f:
-                        self.data = json.load(f)
-                except (json.JSONDecodeError, IOError) as e:
-                    if _debug_enabled():
-                        _console.print(f":cross_mark: [white on red]Error loading JSON config:[/] [white on blue]{e}[/]")
-                    self.data = {}
-            else:
-                # Create empty JSON file
-                self._save_json()
-    
     def __getattr__(self, name: str) -> Any:
         """Get an attribute from the object, creating it if it does not exist and is in the json file.
 
@@ -3718,11 +3825,20 @@ class CONFIG(metaclass=ConfigMeta):
         if name.startswith('_') or name in ['data', 'config', 'CONFIGFILE', 'INDENT']:
             super().__setattr__(name, value)
         else:
+            print(f"type(self.config): {type(self.config)}")
             self.data[name] = value
-            if hasattr(self, '_json_file'):
-                self._save_json()
-            else:
-                warnings.warn("This only supports JSON configuration file!", Warning)
+            if isinstance(self.config, ConfigSetJson) or isinstance(self.config, ConfigSetYaml):
+                self.config.set(name, value)
+            elif isinstance(self.config, ConfigSetIni):
+                value = re.split(r"[:;| ]", value)
+                if len(value) > 2:
+                    self.config.set(name, dict(zip(value[::2], value[1::2])))
+                else:
+                    self.config.set(name, value[0])
+            # if hasattr(self, '_json_file'):
+            #     self._save_json()
+            # else:
+            #     warnings.warn("This only supports JSON configuration file!", Warning)
 
 def create_argument_parser() -> argparse.ArgumentParser:
     """Create an argument parser for the configuration file management tool.
