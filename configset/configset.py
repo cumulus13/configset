@@ -918,6 +918,20 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         
         return self.get_config(*keys, default=default)
 
+    def get_key(self, *keys, default=None):
+        """
+        Alias for get_config.
+        The function `get` is an alias for `get_config` in Python.
+        
+        :param key: The `key` parameter in the `get` method is used to specify the configuration key for
+        which you want to retrieve the value. It is the identifier or name of the configuration setting
+        that you are interested in accessing
+        :return: The `get_config` method is being called with the provided `key` and any additional
+        keyword arguments, and the result of that method call is being returned.
+        """
+        
+        return self.get_config(*keys, default=default)
+
     def get_all(self) -> dict:
         """
         Return the whole JSON-backed configuration as a mapping.
@@ -1819,6 +1833,20 @@ class ConfigSetYaml:
         of this method is being returned.
         """
         
+        return self.get_config(*keys, default=default)
+
+    def get_document(self, *keys, default=None):
+        """
+        Get document configuration value by key.
+        The `get_document` function retrieves a document configuration value by key.
+
+        :param key: The `key` parameter in the `get_document` method is used to specify the document configuration value
+        that you want to retrieve from the configuration settings. When you call the `get_document` method with a
+        specific `key`, it will return the corresponding document configuration value associated with that key
+        :return: The `get_config` method is being called with the `key` parameter, and the return value
+        of this method is being returned.
+        """
+
         return self.get_config(*keys, default=default)
 
     def read_config(self, *keys, default=None):
@@ -3182,11 +3210,11 @@ class ConfigSet:
                     caller_file = Path(frame_info.filename).resolve()
                     break
             if caller_file:
-                default_name = caller_file.stem + ".json"
+                default_name = caller_file.stem + ".ini"
                 file_path = str(caller_file.parent / default_name)
             else:
                 # fallback to cwd/config.json
-                file_path = str(Path.cwd() / "config.json")
+                file_path = str(Path.cwd() / "config.ini")
 
         # If given path is a directory, place config file inside it
         p = Path(file_path)
@@ -3234,70 +3262,6 @@ class ConfigSet:
 
 class configset(ConfigSet):
     pass
-
-# class ConfigMeta1(type):
-#     """Metaclass for creating class-based configuration interfaces."""
-    
-#     def __new__(mcs, name, bases, attrs):
-#         # Initialize config instance
-#         config_file = attrs.get('CONFIGFILE') or attrs.get('configname')
-        
-#         if 'config' in attrs and hasattr(attrs['config'], 'set_config_file'):
-#             config_instance = attrs['config']
-#             if config_file:
-#                 config_instance.set_config_file(config_file)
-#         else:
-#             config_instance = ConfigSet(config_file)
-        
-#         attrs['_config_instance'] = config_instance
-        
-#         # Wrap methods to work as classmethods
-#         def make_classmethod(method):
-#             @wraps(method)
-#             def wrapper(cls, *args, **kwargs):
-#                 return method(cls._config_instance, *args, **kwargs)
-#             return classmethod(wrapper)
-        
-#         # Convert ConfigSet methods to classmethods
-#         for base in bases:
-#             for attr_name, attr_value in base.__dict__.items():
-#                 if (callable(attr_value) and 
-#                     not attr_name.startswith('__') and 
-#                     attr_name not in attrs):
-#                     attrs[attr_name] = make_classmethod(attr_value)
-        
-#         return super().__new__(mcs, name, bases, attrs)
-    
-#     def __getattr__(cls, name):
-#         """Delegate attribute access to config instance."""
-#         if hasattr(cls._config_instance, name):
-#             attr = getattr(cls._config_instance, name)
-#             if callable(attr):
-#                 return lambda *args, **kwargs: attr(*args, **kwargs)
-#             return attr
-        
-#         if hasattr(cls, 'data') and name in cls.data:
-#             return cls.data[name]
-            
-#         raise AttributeError(f"'{cls.__name__}' has no attribute '{name}'")
-    
-#     def __setattr__(cls, name, value):
-#         """Handle attribute assignment."""
-#         if name in ['configname', 'CONFIGNAME', 'CONFIGFILE']:
-#             cls._config_instance.set_config_file(value)
-#         else:
-#             if os.getenv('DEBUG') in ['1', 'true', 'True']: print("Saving ....")
-#             super().__setattr__(name, value)
-
-#     def show(cls):
-#         """Show current configuration."""
-        
-#         if hasattr(cls, '_config_instance'):
-#             return cls._config_instance.print_all_config()
-#         else:
-#             _console.print(":cross_mark: [white on red]No config instance found.[/]")
-#             return None
-
 
 class ConfigMeta(type):
     """
@@ -3407,6 +3371,7 @@ class ConfigMeta(type):
         Raises:
             Exception: Generic exception during config file handling or attribute access.
         """
+        # debug(attrs = attrs)
         # Determine config file name from class attributes (if provided)
         config_file = attrs.get('CONFIGFILE') or attrs.get('configname') or ''
 
@@ -3426,7 +3391,7 @@ class ConfigMeta(type):
         attrs['_config_instance'] = config_instance
 
         # helper to build a classmethod proxy to an instance method
-        def make_classmethod_from_instance(method_name):
+        def make_classmethod_from_instance(method_name, original=None):
             """Create a classmethod that calls an instance method of a configuration instance.
 
             Args:
@@ -3457,13 +3422,23 @@ class ConfigMeta(type):
                 inst = getattr(cls, '_config_instance')
                 method = getattr(inst, method_name)
                 return method(*args, **kwargs)
+            
+            # attempt to use the original callable to copy metadata
+            if original is None:
+                try:
+                    original = getattr(config_instance, method_name)
+                except Exception:
+                    original = None
+            if original:
+                wrapper = wraps(original)(wrapper)
+                
             wrapper.__name__ = method_name
             return classmethod(wrapper)
 
         # expose public callable attributes of the instance as classmethods
         for name in dir(config_instance):
-            if name.startswith('_'):
-                continue
+            # if name.startswith('_'):
+            #     continue
             if name in attrs:
                 continue
             try:
@@ -3471,7 +3446,7 @@ class ConfigMeta(type):
             except Exception:
                 continue
             if callable(attr):
-                attrs[name] = make_classmethod_from_instance(name)
+                attrs[name] = make_classmethod_from_instance(name, original=attr)
 
         return super().__new__(mcs, name, bases, attrs)
 
@@ -3489,12 +3464,29 @@ class ConfigMeta(type):
             AttributeError: Raised if the attribute is not found in the class, its config instance, or data.
         """
         
+        debug(cls__config_instance = cls._config_instance)
         if hasattr(cls, '_config_instance') and hasattr(cls._config_instance, name):
             attr = getattr(cls._config_instance, name)
+            debug(attr = attr)
             if callable(attr):
                 # return a wrapper that calls the instance method
                 return lambda *args, **kwargs: attr(*args, **kwargs)
             return attr
+
+        elif hasattr(cls, '_config_instance') and not str(name).isdigit() and isinstance(cls._config_instance, ConfigSetINI):
+            print('configsetini instance ...')
+            if hasattr(cls._config_instance, 'get_section'):
+                return cls._config_instance.get_section(name)
+
+        elif hasattr(cls, '_config_instance') and not str(name).isdigit() and isinstance(cls._config_instance, ConfigSetJSON):
+            print('configsetjson instance ...')
+            if hasattr(cls._config_instance, 'get_key'):
+                return cls._config_instance.get_key(name)
+
+        elif hasattr(cls, '_config_instance') and not str(name).isdigit() and isinstance(cls._config_instance, ConfigSetYAML):
+            print('configsetyaml instance ...')
+            if hasattr(cls._config_instance, 'get_document'):
+                return cls._config_instance.get_document(name)
 
         if hasattr(cls, 'data') and name in cls.data:
             return cls.data[name] # type: ignore
@@ -3554,20 +3546,20 @@ class ConfigMeta(type):
             print("Saving ....")
         super().__setattr__(name, value)
 
-    def show(cls):
-        """Show current configuration."""
-        if hasattr(cls, '_config_instance'):
-            # prefer unified method names if available
-            inst = cls._config_instance
-            if hasattr(inst, 'print_all_config'):
-                return inst.print_all_config() # type: ignore
-            if hasattr(inst, 'show'):
-                return inst.show()
-            if hasattr(inst, 'print'):
-                return inst.print()
-        else:
-            _console.print(":cross_mark: [white on red]No config instance found.[/]")
-            return None
+    # def show(cls):
+    #     """Show current configuration."""
+    #     if hasattr(cls, '_config_instance'):
+    #         # prefer unified method names if available
+    #         inst = cls._config_instance
+    #         if hasattr(inst, 'print_all_config'):
+    #             return inst.print_all_config() # type: ignore
+    #         if hasattr(inst, 'show'):
+    #             return inst.show()
+    #         if hasattr(inst, 'print'):
+    #             return inst.print()
+    #     else:
+    #         _console.print(":cross_mark: [white on red]No config instance found.[/]")
+    #         return None
         
 class CONFIG(metaclass=ConfigMeta):
     """
@@ -3686,16 +3678,6 @@ class CONFIG(metaclass=ConfigMeta):
                 # Create empty JSON file
                 self._save_json()
     
-    def _save_json(self) -> None:
-        """Save current data to JSON file."""
-        if hasattr(self, '_json_file'):
-            try:
-                with open(self._json_file, 'w', encoding='utf-8') as f:
-                    json.dump(self.data, f, indent=self.INDENT, ensure_ascii=False)
-            except IOError as e:
-                if _debug_enabled():
-                    _console.print(f":cross_mark: [white on red]Error saving JSON config:[/] [white on blue]{e}[/]")
-
     def __getattr__(self, name: str) -> Any:
         """Get an attribute from the object, creating it if it does not exist and is in the json file.
 
