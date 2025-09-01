@@ -3609,17 +3609,17 @@ class ConfigMeta(type):
             return attr
 
         elif hasattr(cls, '_config_instance') and not str(name).isdigit() and isinstance(cls._config_instance, ConfigSetINI):
-            print('configsetini instance ...')
+            if _debug_enabled(): print('configsetini instance ...')
             if hasattr(cls._config_instance, 'get_section'):
                 return cls._config_instance.get_section(name)
 
         elif hasattr(cls, '_config_instance') and not str(name).isdigit() and isinstance(cls._config_instance, ConfigSetJSON):
-            print('configsetjson instance ...')
+            if _debug_enabled(): print('configsetjson instance ...')
             if hasattr(cls._config_instance, 'get_key'):
                 return cls._config_instance.get_key(name)
 
         elif hasattr(cls, '_config_instance') and not str(name).isdigit() and isinstance(cls._config_instance, ConfigSetYAML):
-            print('configsetyaml instance ...')
+            if _debug_enabled(): print('configsetyaml instance ...')
             if hasattr(cls._config_instance, 'get_document'):
                 return cls._config_instance.get_document(name)
 
