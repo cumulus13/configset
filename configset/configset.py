@@ -3329,28 +3329,65 @@ class ConfigSet:
         """
         # Determine the final path (the same logic as it is now)
         file_path = config_file or ''
+        
         if config_dir:
             file_path = os.path.join(config_dir, config_name or config_file)
         
          # If no path provided, derive from caller module (the importer)
+        # if not file_path:
+        #     caller_file = None
+        #     for frame_info in inspect.stack()[1:]:
+        #         try:
+        #             module = inspect.getmodule(frame_info.frame)
+        #         except Exception:
+        #             module = None
+        #         # choose first frame outside this module
+        #         if module and module.__name__ != __name__:
+        #             caller_file = Path(frame_info.filename).resolve()
+        #             break
+        #     if caller_file:
+        #         default_name = caller_file.stem + ".ini"
+        #         file_path = str(caller_file.parent / default_name)
+        #     else:
+        #         # fallback to cwd/config.json
+        #         file_path = str(Path.cwd() / "config.ini")
+        
+        if _debug_enabled(): print(f"file_path [1]: {file_path}")
         if not file_path:
+            # Prefer explicit program name if available (main script)
+            prog = None
+            if sys.argv and sys.argv[0]:
+                try:
+                    prog_path = Path(sys.argv[0]).resolve()
+                    if prog_path.exists() and prog_path.suffix:
+                        prog = prog_path
+                except Exception:
+                    prog = None
+
             caller_file = None
+            pkg_dir = Path(__file__).parent.resolve()
+            # scan stack but skip frames inside site-packages/dist-packages and this package
             for frame_info in inspect.stack()[1:]:
                 try:
-                    module = inspect.getmodule(frame_info.frame)
+                    filename = Path(frame_info.filename).resolve()
                 except Exception:
-                    module = None
-                # choose first frame outside this module
-                if module and module.__name__ != __name__:
-                    caller_file = Path(frame_info.filename).resolve()
-                    break
-            if caller_file:
-                default_name = caller_file.stem + ".ini"
-                file_path = str(caller_file.parent / default_name)
-            else:
-                # fallback to cwd/config.json
-                file_path = str(Path.cwd() / "config.ini")
+                    continue
+                parts = [p.lower() for p in filename.parts]
+                # skip frames that are inside site-packages / dist-packages or inside this package dir
+                if 'site-packages' in parts or 'dist-packages' in parts or pkg_dir in filename.parents:
+                    continue
+                # skip internal configset frames
+                if filename == Path(__file__).resolve():
+                    continue
+                caller_file = filename
+                break
 
+            # prefer program path, then selected caller frame, else cwd fallback
+            base = prog or caller_file or Path.cwd() / "config"
+            default_name = base.stem + ".ini"
+            file_path = str(base.parent / default_name)
+
+        if _debug_enabled(): print(f"file_path [2]: {file_path}")
         # If given path is a directory, place config file inside it
         p = Path(file_path)
         if p.is_dir():
@@ -3378,11 +3415,31 @@ class ConfigSet:
             pass
 
         # Detect file type (prefer content detection, fallback to extension, default json)
+        
         file_type = detect_file_type(str(p)) or (
             "yaml" if p.suffix.lower() in (".yaml", ".yml") else
             "ini" if p.suffix.lower() == ".ini" else
             "json"
         )
+        if _debug_enabled(): print(f"Detected file type for {p}: {file_type}")
+        # if os.path.basename(file_path) == '__init__.ini':
+        #     return None
+        # avoid accidentally using package __init__ files (e.g. installed package paths)
+        try:
+            p_resolved = p.resolve()
+        except Exception:
+            p_resolved = p
+
+        pkg_dir = Path(__file__).parent.resolve()
+        # if target is an __init__ file that lives inside this package (or site-packages copy),
+        # skip and return None to avoid creating/using a package __init__ as a config file.
+        if p_resolved.stem == "__init__" and pkg_dir in p_resolved.parents:
+            if _debug_enabled():
+                _console.print(f":warning: Skipping package __init__ file as config target: {p_resolved}")
+            return None
+
+        if _debug_enabled():
+            _console.print(f"Detected file type for {p_resolved}: {file_type}")
         
         if file_type == 'json':
             return ConfigSetJSON(json_file=file_path, **kwargs)
