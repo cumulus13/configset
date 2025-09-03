@@ -2767,7 +2767,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
             return self.print_all_config()
         
     def get_config(self, section: str, option: str, 
-                  default: Any = None, auto_write: bool = False) -> Any:
+                  default: Any = None, auto_write: bool = False, value: Any = None) -> Any:
         """
         Get configuration value with automatic type conversion.
         This method retrieves a configuration value, applying type conversion as needed.
@@ -2781,7 +2781,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         Returns:
             Configuration value with appropriate type conversion
         """
-        
+        if value is not None: default = value
         if auto_write is None:
             auto_write = self._auto_write
             
@@ -2832,7 +2832,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         """
         return self.get_config(*args, **kwargs)
 
-    def write_config(self, section: str, option: str = '', value: Any = '') -> Any:
+    def write_config(self, section: str, option: str = '', value: Any = '', raw: bool = False) -> Any:
         """
         Write or update a configuration value in the INI-backed ConfigSet.
         This method accepts a variety of input types and normalizes them before
@@ -2909,14 +2909,18 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
             # Convert value to string for storage
             str_value = str(value) if value is not None else ''
             # super().set(section, option, str_value)
+            if _debug_enabled():
+                print(f"section: {section}")
+                print(f"option: {option}")
+                print(f"value: {value}, type: {type(value)}")
             try:
-                super().set(section, option, str_value)
+                super(ConfigSetIni, self).set(section, option, str_value)
             except configparser.NoSectionError:
-                super().add_section(section)
-                super().set(section, option, str_value)
+                super(ConfigSetIni, self).add_section(section)
+                super(ConfigSetIni, self).set(section, option, str_value)
             except configparser.NoOptionError:
-                super().set(section, option, str_value)
-        
+                super(ConfigSetIni, self).set(section, option, str_value)
+
         # ensure dict is only 1-level deep
         def _dict_depth(d):
             if not isinstance(d, dict):
@@ -2935,10 +2939,10 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         
         if isinstance(value, bytes):
             value = value.decode('utf-8')
-        if isinstance(value, list):
+        if isinstance(value, list) and not raw:
             value = " ".join(value)
             _write(section, option, value)
-        elif isinstance(value, str) and value.strip().startswith("[") and value.strip().endswith("]"):
+        elif isinstance(value, str) and value.strip().startswith("[") and value.strip().endswith("]") and not raw:
             try:
                 value = ast.literal_eval(value)
                 value = " ".join(value)
@@ -2949,7 +2953,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
                 warnings.warn(f"ConfigSetIni: Failed to parse list for INI value: {e}", UserWarning)
                 _write(section, option, value)
                 
-        elif isinstance(value, str) and value.strip().startswith("{") and value.strip().endswith("}"):
+        elif isinstance(value, str) and value.strip().startswith("{") and value.strip().endswith("}") and not raw:
             # Attempt to parse stringified dict
             try:
                 parsed = json.loads(value)
@@ -2979,7 +2983,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
                     _console.print(f":warning: [bold #00FFFF]ConfigSetIni:[/] [white on red]Failed to process value[/] [white on blue]{section}:{option}[/]")
                 warnings.warn(f"ConfigSetIni: Failed to process INI value: {e}", UserWarning)
                 
-        elif isinstance(value, dict):
+        elif isinstance(value, dict) and not raw:
             
             if _dict_depth(value) > 1:
                 msg = "INI value must be a 1-level dict (no nested dicts)."
@@ -2992,6 +2996,9 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
                 for key in value:
                     _write(section, key, value[key])
 
+        else:
+            _write(section, option, str(value) if value else '')
+            
         self._save_config()
 
         return self.get_config(section, option)
