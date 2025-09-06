@@ -1,48 +1,39 @@
 # 📋 ConfigSet - Enhanced Configuration Management Library
 
-[![Python Version](https://img.shields.io/badge/python-2.7%2B%20%7C%203.6%2B-blue.svg)](https://python.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
-[![Status](https://img.shields.io/badge/status-stable-brightgreen.svg)](https://github.com)
-
-> 🚀 **A powerful and flexible configuration management library that supports both INI and JSON formats with automatic type conversion, list/dictionary parsing, and class-based interfaces.**
-
----
+🚀 **A powerful and flexible configuration management library that supports both INI and JSON formats with automatic type conversion, list/dictionary parsing, and class-based interfaces.**
 
 ## 📖 Table of Contents
 
-- [✨ Features](#-features)
-- [📦 Installation](#-installation)
-- [🚀 Quick Start](#-quick-start)
-- [📚 Documentation](#-documentation)
-- [🎯 Usage Examples](#-usage-examples)
-- [🖥️ Command Line Interface](#️-command-line-interface)
-- [🏗️ Advanced Usage](#️-advanced-usage)
-- [🔧 Configuration](#-configuration)
-- [🤝 Contributing](#-contributing)
-- [📄 License](#-license)
-
----
+* [✨ Features](#features)
+* [📦 Installation](#installation)
+* [🚀 Quick Start](#quick-start)
+* [📚 Documentation](#documentation)
+* [🎯 Usage Examples](#usage-examples)
+* [🖥️ Command Line Interface](#command-line-interface)
+* [🗃️ Advanced Usage](#advanced-usage)
+* [🔧 Configuration](#configuration)
+* [🤝 Contributing](#contributing)
+* [📄 License](#license)
 
 ## ✨ Features
 
 | Feature | Description | Icon |
 |---------|-------------|------|
-| **INI Support** | Full INI file configuration management | 📄 |
-| **JSON Support** | JSON configuration with attribute-based access | 🗂️ |
-| **Auto Type Conversion** | Automatic string to bool/int/float conversion | 🔄 |
-| **List Parsing** | Parse comma-separated, newline-separated, and JSON arrays | 📝 |
-| **Dictionary Parsing** | Parse key:value pairs and JSON objects | 🗝️ |
-| **Class-based Interface** | Metaclass-powered configuration classes | 🏛️ |
-| **CLI Interface** | Command-line tool for configuration management | 💻 |
-| **Search Functionality** | Find sections and options with case sensitivity control | 🔍 |
-| **Pretty Printing** | Enhanced output with optional color support | 🎨 |
-| **Python 2/3 Compatible** | Works with both Python 2.7+ and Python 3.6+ | 🐍 |
-
----
+| INI Support | Full INI file configuration management | 📄 |
+| JSON Support | JSON configuration with attribute-based access | 🗂️ |
+| Auto Type Conversion | Automatic string to bool/int/float conversion | 🔄 |
+| List Parsing | Parse comma-separated, newline-separated, and JSON arrays | 📝 |
+| Dictionary Parsing | Parse key:value pairs and JSON objects | 🗃️ |
+| Class-based Interface | Metaclass-powered configuration classes | 🏛️ |
+| CLI Interface | Command-line tool for configuration management | 💻 |
+| Search Functionality | Find sections and options with case sensitivity control | 🔍 |
+| Pretty Printing | Enhanced output with optional color support | 🎨 |
+| Python 2/3 Compatible | Works with both Python 2.7+ and Python 3.6+ | 🐍 |
 
 ## 📦 Installation
 
 ### 📋 Basic Installation
+
 ```bash
 # Install from PyPI
 pip install configset
@@ -58,7 +49,6 @@ pip install -e .
 pip install git+https://github.com/cumulus13/configset.git
 ```
 
-
 ### 🎨 With Optional Dependencies (Recommended)
 
 ```bash
@@ -71,10 +61,8 @@ pip install rich jsoncolor make-colors
 
 ### 📋 Requirements
 
-- **Python 2.7+ or Python 3.6+**
-- **Optional**: `rich`, `jsoncolor`, `make-colors` for enhanced output
-
----
+* **Python 2.7+ or Python 3.6+**
+* **Optional**: rich, jsoncolor, make-colors for enhanced output
 
 ## 🚀 Quick Start
 
@@ -83,6 +71,7 @@ pip install rich jsoncolor make-colors
 ```python
 from configset import ConfigSet
 # or from configset import configset
+
 # Create configuration instance
 config = ConfigSet('myapp.ini')
 # or config = configset('myapp.ini')
@@ -117,15 +106,13 @@ config.debug_mode = True
 print(f"API Key: {config.api_key}")  # Output: API Key: secret123
 ```
 
----
-
 ## 📚 Documentation
 
 ### 🔧 ConfigSet Class
 
 The main class for INI file configuration management.
 
-#### 📝 Constructor
+#### 🏗 Constructor
 
 ```python
 ConfigSet(config_file='', auto_write=True, **kwargs)
@@ -133,23 +120,21 @@ ConfigSet(config_file='', auto_write=True, **kwargs)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `config_file` | `str` | `''` | Path to configuration file |
-| `auto_write` | `bool` | `True` | Auto-create missing files/sections |
-| `**kwargs` | `dict` | `{}` | Additional ConfigParser arguments |
+| config_file | str | '' | Path to configuration file |
+| auto_write | bool | True | Auto-create missing files/sections |
+| **kwargs | dict | {} | Additional ConfigParser arguments |
 
 #### 🔑 Key Methods
 
 | Method | Description | Return Type |
 |--------|-------------|-------------|
-| `get_config(section, option, default=None)` | Get config value with type conversion | `Any` |
-| `write_config(section, option, value)` | Write config value to file | `Any` |
-| `remove_config(section, option=None)` | Remove section or specific option | `bool` |
-| `get_config_as_list(section, option, default=None)` | Parse value as list | `List[Any]` |
-| `get_config_as_dict(section, option, default=None)` | Parse value as dictionary | `Dict[str, Any]` |
-| `find(query, case_sensitive=True, verbose=False)` | Search sections/options | `bool` |
-| `print_all_config(sections=None)` | Print all configuration | `List[Tuple]` |
-
----
+| get_config(section, option, default=None) | Get config value with type conversion | Any |
+| write_config(section, option, value) | Write config value to file | Any |
+| remove_config(section, option=None) | Remove section or specific option | bool |
+| get_config_as_list(section, option, default=None) | Parse value as list | List[Any] |
+| get_config_as_dict(section, option, default=None) | Parse value as dictionary | Dict[str, Any] |
+| find(query, case_sensitive=True, verbose=False) | Search sections/options | bool |
+| print_all_config(sections=None) | Print all configuration | List[Tuple] |
 
 ## 🎯 Usage Examples
 
@@ -178,7 +163,7 @@ features = config.get_config_as_list('cluster', 'features')
 # Returns: ['load_balancer', 'ssl_support', 'monitoring']
 ```
 
-### 🗝️ Dictionary Configuration
+### 🗃️ Dictionary Configuration
 
 ```python
 config = ConfigSet('settings.ini')
@@ -208,8 +193,6 @@ config.find('host', verbose=True)  # Print found items
 config.remove_config('old_section')              # Remove entire section
 config.remove_config('database', 'old_option')   # Remove specific option
 ```
-
----
 
 ## 🖥️ Command Line Interface
 
@@ -250,9 +233,7 @@ python -m configset myapp.ini --read --section limits --option quotas --dict
 DEBUG=1 python -m configset myapp.ini --all
 ```
 
----
-
-## 🏗️ Advanced Usage
+## 🗃️ Advanced Usage
 
 ### 🎨 Custom Configuration Classes
 
@@ -357,50 +338,49 @@ if config.validate():
     pass
 ```
 
----
-
 ## 🔧 Configuration
 
 ### 🌍 Environment Variables
 
 | Variable | Description | Values |
 |----------|-------------|--------|
-| `DEBUG` | Enable debug output | `1`, `true`, `yes` |
-| `DEBUG_SERVER` | Enable server debug mode | `1`, `true`, `yes` |
-| `SHOW_CONFIGNAME` | Show config file path | `1`, `true`, `yes` |
+| DEBUG | Enable debug output | 1, true, yes |
+| DEBUG_SERVER | Enable server debug mode | 1, true, yes |
+| SHOW_CONFIGNAME | Show config file path | 1, true, yes |
 
 ### 🎨 Optional Dependencies
 
 ```bash
 # Enhanced output with colors and formatting
 pip install rich           # Rich text and tables
-pip install jsoncolor      # JSON syntax highlighting  
+pip install jsoncolor      # JSON syntax highlighting    
 pip install make-colors    # Terminal color support
 ```
 
----
-
-## 🔄 Migration Guide
+## 📄 Migration Guide
 
 ### 📈 From v1.x to v2.x
 
 **Breaking Changes:**
-- Removed redundant methods (`read_config2`, `read_config3`, etc.)
-- Simplified method signatures
-- Enhanced type conversion
+
+* Removed redundant methods (read_config2, read_config3, etc.)
+* Simplified method signatures
+* Enhanced type conversion
 
 **Migration Steps:**
+
 ```python
 # Old v1.x code
 config.read_config2('section', 'option')
 
-# New v2.x code  
+# New v2.x code    
 config.get_config_as_list('section', 'option')
 ```
 
 ### 🔧 Configuration File Format
 
 **INI Format Example:**
+
 ```ini
 [database]
 host = localhost
@@ -415,6 +395,7 @@ headers = {"Content-Type": "application/json", "Accept": "application/json"}
 ```
 
 **JSON Format Example:**
+
 ```json
 {
     "database_host": "localhost",
@@ -424,8 +405,6 @@ headers = {"Content-Type": "application/json", "Accept": "application/json"}
     "feature_flags": ["auth", "cache", "monitoring"]
 }
 ```
-
----
 
 ## 🧪 Testing
 
@@ -445,7 +424,7 @@ pytest --cov=configset tests/
 pytest tests/test_configset.py -v
 ```
 
-### 📝 Test Example
+### 🔍 Test Example
 
 ```python
 import pytest
@@ -477,8 +456,6 @@ def test_config_basic_operations():
     finally:
         os.unlink(config_file)
 ```
-
----
 
 ## 🤝 Contributing
 
@@ -522,40 +499,34 @@ pytest tests/ --cov=configset
 4. 📝 **Update documentation** if needed
 5. 🎯 **Commit** your changes (`git commit -m 'Add amazing feature'`)
 6. 📤 **Push** to the branch (`git push origin feature/amazing-feature`)
-7. 🔄 **Open** a Pull Request
-
----
+7. 📄 **Open** a Pull Request
 
 ## 📊 Changelog
 
 ### 🎉 v1.56 (Latest)
 
-- ✨ **New Features:**
-  - Enhanced type conversion system
-  - List and dictionary parsing
-  - Class-based configuration interface
-  - Improved CLI with delete operations
-  - Search functionality
-  - Pretty printing with colors
-
-- 🔧 **Improvements:**
-  - Better error handling
-  - Python 2/3 compatibility
-  - Comprehensive documentation
-  - Unit tests coverage
-  - Type hints support
-
-- 🗑️ **Removed:**
-  - Deprecated methods (`read_config2`, `read_config3`, etc.)
-  - Redundant functionality
+* ✨ **New Features:**
+  * Enhanced type conversion system
+  * List and dictionary parsing
+  * Class-based configuration interface
+  * Improved CLI with delete operations
+  * Search functionality
+  * Pretty printing with colors
+* 🔧 **Improvements:**
+  * Better error handling
+  * Python 2/3 compatibility
+  * Comprehensive documentation
+  * Unit tests coverage
+  * Type hints support
+* 🗑️ **Removed:**
+  * Deprecated methods (read_config2, read_config3, etc.)
+  * Redundant functionality
 
 ### 📚 v1.x (Legacy)
 
-- Basic INI file support
-- Simple read/write operations
-- Limited type conversion
-
----
+* Basic INI file support
+* Simple read/write operations
+* Limited type conversion
 
 ## 📄 License
 
@@ -585,50 +556,35 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
----
-
 ## 🙏 Acknowledgments
 
-- 🐍 **Python ConfigParser** - Foundation for INI file handling
-- 🎨 **Rich Library** - Enhanced terminal output
-- 🌈 **Make Colors** - Terminal color support
-- 🎯 **JSONColor** - JSON syntax highlighting
-- 👥 **Contributors** - Thank you to all contributors!
-
----
+* 🐍 **Python ConfigParser** - Foundation for INI file handling
+* 🎨 **Rich Library** - Enhanced terminal output
+* 🌈 **Make Colors** - Terminal color support
+* 🎯 **JSONColor** - JSON syntax highlighting
+* 👥 **Contributors** - Thank you to all contributors!
 
 ## 📞 Support & Contact
 
-- 📧 **Email**: licface@yahoo.com
-- 🐛 **Issues**: [GitHub Issues](https://github.com/cumulus13/configset/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/cumulus13/configset/discussions)
-- 📖 **Documentation**: [Wiki](https://github.com/cumulus13/configset/wiki)
-
----
-
-<div align="center">
+* 📧 **Email**: cumulus13@gmail.com
+* 🐛 **Issues**: [GitHub Issues](https://github.com/cumulus13/configset/issues)
+* 💬 **Discussions**: [GitHub Discussions](https://github.com/cumulus13/configset/discussions)
+* 📖 **Documentation**: [Wiki](https://github.com/cumulus13/configset/wiki)
 
 **⭐ If you find ConfigSet useful, please consider giving it a star! ⭐**
 
 Made with ❤️ by developers, for developers.
 
-[🔝 Back to Top](#-configset---enhanced-configuration-management-library)
-
-</div>
-
+[🔝 Back to Top](#configset---enhanced-configuration-management-library)
 
 ## Support
 
-*   Python 2.7+, 3.x+
-*   Windows, Linux, Mac
+* Python 2.7+, 3.x+
+* Windows, Linux, Mac
 
-## author
+## Author
+
 [Hadi Cahyadi](mailto:cumulus13@gmail.com)
-    
-
-[![Buy Me a Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/cumulus13)
-
-[![Donate via Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/cumulus13)
 
 [Support me on Patreon](https://www.patreon.com/cumulus13)
 
