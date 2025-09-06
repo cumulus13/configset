@@ -1,6 +1,6 @@
 # 📋 ConfigSet - Enhanced Configuration Management Library
 
-🚀 **A powerful and flexible configuration management library that supports both INI and JSON formats with automatic type conversion, list/dictionary parsing, and class-based interfaces.**
+🚀 **A powerful and flexible configuration management library that supports both INI, JSON and YAML formats with automatic type conversion, list/dictionary parsing, and class-based interfaces.**
 
 ## 📖 Table of Contents
 
