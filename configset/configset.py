@@ -2300,6 +2300,188 @@ class configsetjson(ConfigSetJson):
     """Alias for ConfigSetJson with lowercase naming."""
     pass
 
+class AttrDict(dict):
+    """A dictionary-like object that allows attribute-style access.
+
+    Attributes:
+        name(str): Attribute name.
+        value(object): Attribute value.
+    """
+    
+    def __getattr__(self, name):
+        """Get an attribute from the object. If the attribute is a dictionary, it will be converted to an AttrDict.
+
+        Args:
+            self(self): The object
+            name(str): The name of the attribute.
+
+        Returns:
+            Union[Any, AttrDict]: The value of the attribute. If the attribute is a dictionary, it will be converted to an AttrDict. Otherwise, the original value is returned.
+
+        Raises:
+            AttributeError: Raised if the attribute is not found.
+        """
+        if name in self:
+            val = self[name]
+            if isinstance(val, dict):
+                return AttrDict(val)
+            return val
+        raise AttributeError(f"{self.__class__.__name__!s} has no attribute {name!r}")
+
+    def __setattr__(self, name, value):
+        """Set an attribute of this object, creating nested AttrDicts as needed.
+
+        Args:
+            name(str): Name of the attribute to set.
+            value(Any): Value to set the attribute to.
+
+        Returns:
+            None: No explicit return value.
+
+        Raises:
+            TypeError: If the attribute name is not a string or the value cannot be assigned.
+        """
+        self[name] = value
+        # Automatically create nested AttrDicts for new dict values
+        if isinstance(value, dict):
+            self[name] = AttrDict(value)
+
+# small helper proxies for nicer dot-access with INI backend
+class _IniSectionProxy:
+    """Proxy for accessing INI file sections.
+
+    Attributes:
+        _backend(_IniBackend): Backend object for accessing INI data.
+        _section(str): Name of the INI section.
+    """
+    def __init__(self, backend, section: str):
+        """Initialize a new configuration manager instance.
+
+        Args:
+            self(ConfigurationManager): The ConfigurationManager instance.
+            backend(Backend): The backend instance to use.
+            section(str): The configuration section to manage.
+
+        Returns:
+            None: No return value.
+
+        Raises:
+            TypeError: Raised if the backend is not a valid Backend instance.
+            ValueError: Raised if the section name is invalid.
+        """
+        self._backend = backend
+        self._section = section
+
+    def __getattr__(self, opt: str):
+        """Get a configuration option value.
+
+        Args:
+            self(ConfigParser): The ConfigParser instance.
+            opt(str): The name of the configuration option to retrieve.
+
+        Returns:
+            Union[str, None]: The value of the configuration option, or None if not found.
+
+        Raises:
+            AttributeError: Raised if the specified section or option doesn't exist.
+            Exception: Raised if any other error occurs during configuration retrieval.
+        """
+        # return option value or default None
+        try:
+            return self._backend.get_config(self._section, opt)
+        except Exception:
+            raise AttributeError(f"Section '{self._section}' has no option '{opt}'")
+
+    def items(self):
+        """Retrieve items from a specific section.
+
+        Args:
+            self(self): Instance of the class.
+
+        Returns:
+            dict: A dictionary containing the items from the specified section. Returns an empty dictionary if the section is not found or is not a dictionary.
+
+        Raises:
+            KeyError: If the specified section does not exist in the backend.
+            TypeError: If the retrieved section is not a dictionary.
+        """
+        sec = self._backend.get_section(self._section)
+        return sec.get(self._section, {}) if isinstance(sec, dict) else {}
+
+    def __repr__(self):
+        """Returns an INI section proxy representation.
+
+        Args:
+            self(INIProxy): Instance of the INIProxy class.
+
+        Returns:
+            str: String representation of the INI section proxy.
+
+        Raises:
+            Exception: Generic exception during string representation.
+        """
+        return f"<INI section proxy {self._section}>"
+
+class _IniOptionProxy:
+    """Proxy for accessing INI-style configuration options.
+
+    Attributes:
+        _backend(object): Backend configuration object.
+        _option(str): Name of the configuration option.
+    """
+    def __init__(self, backend, option: str):
+        self._backend = backend
+        self._option = option
+
+    def __getattr__(self, section: str):
+        """Get a configuration option value from a specific section.
+
+        Args:
+            self(Config): Instance of the Config class.
+            section(str): Name of the configuration section.
+
+        Returns:
+            Any: Value of the configuration option if found; otherwise, raises AttributeError.
+
+        Raises:
+            AttributeError: Raised when the specified option is not found in the given section.
+            Exception: Raised if any other error occurs during configuration retrieval.
+        """
+        # return value for this option under given section
+        try:
+            return self._backend.get_config(section, self._option)
+        except Exception:
+            raise AttributeError(f"Option '{self._option}' not found in section '{section}'")
+
+    def find_all(self):
+        """Find all values.
+
+        Args:
+            self(Any): The instance of the class.
+
+        Returns:
+            dict: A dictionary mapping section names to their values, where the option exists.
+
+        Raises:
+            Exception: If an error occurs during the find operation.
+        """
+        # return dict of section -> value where option exists
+        return self._backend.find(self._option)
+
+    def __repr__(self):
+        """Return a string representation of the INI option proxy.
+
+        Args:
+            self(INIProxy): The INIProxy instance.
+
+        Returns:
+            str: A string representing the INI option proxy.
+
+        Raises:
+            Exception: Any exception raised during string formatting.
+        """
+        return f"<INI option proxy {self._option}>"
+
 class ConfigSetIni(configparser.RawConfigParser): # type: ignore
     """
     ConfigSetIni
@@ -2658,7 +2840,8 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         """
         if self.has_section(section):
             options = {opt: self.get_config(section, opt) for opt in self.options(section)}
-            return {section: options}
+            # return {section: options}
+            return AttrDict(options)
         else:
             _console.print(f":x: [white on red]No section[/] [white on blue]'{section}'[/] [white on red]found ![/]")
             return None
@@ -3671,6 +3854,26 @@ class ConfigMeta(type):
                 # return a wrapper that calls the instance method
                 return lambda *args, **kwargs: attr(*args, **kwargs)
             return attr
+        
+        # INI: prefer section proxy (CONFIG.section.option), otherwise option proxy (CONFIG.option.section)
+        elif hasattr(cls, '_config_instance') and isinstance(cls._config_instance, ConfigSetINI):
+            inst = cls._config_instance
+            # If the name is an existing INI section, return the concrete section mapping
+            try:
+                if inst.has_section(name):
+                    # get_section returns {section: {option: value, ...}} or None
+                    return inst.get_section(name)
+            except Exception:
+                # fallthrough to option lookup
+                pass
+            # Otherwise if the name matches an option somewhere, return an OptionProxy
+            try:
+                found = inst.find(name)
+                if found:
+                    return _IniOptionProxy(inst, name)
+            except Exception:
+                pass
+
 
         elif hasattr(cls, '_config_instance') and not str(name).isdigit() and isinstance(cls._config_instance, ConfigSetINI):
             if _debug_enabled(): print('configsetini instance ...')
