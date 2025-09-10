@@ -55,6 +55,19 @@ jprint = print
 def make_colors(data, *args, **kwargs):
     """Dummy function for make_colors, replace with actual implementation if available."""
     return str(data)  # Just return string representation for now
+
+try:
+    from jsoncolor import jprint
+    HAS_JSONCOLOR = True
+except Exception as e:
+    pass
+
+try:
+    from make_colors import make_colors
+    HAS_MAKE_COLORS = True
+except Exception as e:
+    pass
+
 try:
     from rich import print_json
     from rich.console import Console
@@ -79,9 +92,33 @@ except ImportError:
                     arg = EMOJI_PATTERN.sub("", arg)   # hapus emoji :..:
                 cleaned.append(arg)
             print(*cleaned, **kwargs)
-
+    
+        @staticmethod
+        def print_exception(*args, **kwargs):
+            if HAS_RICH:
+                return rich_console.print_exception(*args, **kwargs)
+            else:
+                if HAS_MAKE_COLORS:
+                    exc_type, exc_value, exc_tb = sys.exc_info()
+                    # Dapatkan traceback sebagai list of string
+                    tb_list = traceback.format_exception(exc_type, exc_value, exc_tb)
+                    for line in tb_list:
+                        if line.strip().startswith("File"):
+                            print(make_colors(line, 'lc')) 
+                        elif line.strip().startswith(exc_type.__name__):
+                            print(make_colors(line.strip(), 'lw', 'r')) 
+                        else:
+                            print(make_colors(line.strip(), 'b', 'ly')) 
+                            
+                else:
+                    # Or print full exception
+                    return traceback.print_exception(
+                        type(sys.last_value),  # exception type
+                        sys.last_value,        # exception instance
+                        sys.last_traceback     # traceback
+                    )
+        
     def print_json(*args, **kwargs):
-        import json
         print(json.dumps(args[0], indent=2) if args else "")
 
     class rich_traceback:
@@ -94,17 +131,6 @@ except ImportError:
 
     HAS_RICH = False
     
-    try:
-        from jsoncolor import jprint
-        HAS_JSONCOLOR = True
-    except ImportError:
-        HAS_JSONCOLOR = False
-        try:
-            from make_colors import make_colors
-            HAS_MAKECOLOR = True
-        except ImportError:
-            HAS_MAKECOLOR = False
-
 if HAS_RICH:
     try:
         from licface import CustomRichHelpFormatter
@@ -158,11 +184,12 @@ def _debug_enabled() -> bool:
     The function `_debug_enabled()` checks if debug mode is enabled based on specific environment
     variables.
     :return: The function `_debug_enabled()` returns a boolean value indicating whether debug mode is
-    enabled based on the values of the environment variables `DEBUG` and `DEBUG_SERVER`.
+    enabled based on the values of the environment variables `CONFIGSET_DEBUG` 
+    in ['1', 'true', 'yes', 'True', 'TRUE'].
     """
     
     # return (os.getenv('DEBUG', '').lower() in ['1', 'true', 'yes'] or os.getenv('DEBUG_SERVER', '').lower() in ['1', 'true', 'yes'])
-    return os.getenv('DEBUG', '').lower() in ['1', 'true', 'yes']
+    return os.getenv('CONFIGSET_DEBUG', '').lower() in ['1', 'true', 'yes', 'True', 'TRUE']
 
 SEP_RE = re.compile(r'[.:;|]')
 
@@ -664,7 +691,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         The function displays JSON configuration with colored output if available using different
         libraries.
         """
-        
+        self._load_config()
         if HAS_JSONCOLOR:
             jprint(self.json)
         elif HAS_RICH:
@@ -683,6 +710,16 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         
         return self.show()
     
+    def print_all_config(self):
+        """
+        Print all configuration data (alias for show).
+        The `print_all_config` function is an alias for the `show` function, which prints all
+        configuration data.
+        :return: The `print_all_config` method is returning the result of calling the `show` method.
+        """
+        
+        return self.show()
+    
     @property
     def filename(self):
         """
@@ -693,6 +730,18 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         """
         
         return str(self.json_file)
+    
+    @property
+    def configfile(self):
+        """
+        Get the configuration file name (alias for `self.filename`).
+        The `configfile` function returns the configuration file name, which is an alias for the
+        filename.
+        :return: The method `configfile` is returning the value of `self.filename`, which is the
+        configuration file name or alias for the filename.
+        """
+        
+        return self.filename
     
     def exists(self, key):
         """
@@ -828,8 +877,31 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
             if _debug_enabled():
                 _console.print(f"\n:cross_mark: [white on red]Error getting config:[/] [white on blue]{e}[/]")
             return default
+        
+    def format_value(self, value):
+        """Convert a value to its appropriate Python type.
+
+        Args:
+            self(Any): The object itself.
+            value(Any): The value to format.
+
+        Returns:
+            Any: The formatted value.
+
+        Raises:
+            TypeError: If the value cannot be converted to a supported type.
+        """
+        if value and isinstance(value, bytes):
+            value = value.decode()
+        if value and isinstance(value, str) and str(value).isdigit():
+            value = int(value)
+        elif value and isinstance(value, str) and str(value).replace(".", "").isdigit() and len(str(value).split(".")) == 2:
+            value = float(value)
+        elif value and str(value).lower() in ['true', 'false']:
+            value = str(value).lower() == 'true'
+        return value
     
-    def get_config(self, *keys, default=None):
+    def get_config(self, *keys, default=None, auto_write=False, force_write=False):
         """
         Get configuration value by nested keys.
 
@@ -844,15 +916,20 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         separators. Any argument that contains separators will be split into segments and those
         segments are injected in-place, so e.g. get_config('k1', 'k2.k3:k4', 'k5') becomes
         ['k1','k2','k3','k4','k5'].
+        
+        :param key: The `key` parameter in the `get` method is used to specify the configuration key for
+        which you want to retrieve the value. It is the identifier or name of the configuration setting
+        that you are interested in accessing
+        :param auto_write: The `auto_write` parameter is a boolean flag that determines whether the
+        method should automatically write the default value to the configuration if the specified key
+        :param default: The `default` parameter in the `get` method is used to specify a default value that will be
+        returned if the requested configuration key is not found. If the key does not exist in the
+        :return: ke
         """
-        if default and isinstance(default, bytes):
-            default = default.decode()
+        if _debug_enabled():
+            _console.print(f"\n:mag: [white on blue]get_config called with keys:[/] [white on green]{keys}[/] [white on blue]and default:[/] [white on green]{default}[/]")
         
-        if default and isinstance(default, str) and str(default).isdigit():
-            default = int(default)
-        
-        if default and isinstance(default, str) and str(default).replace(".", "").isdigit():
-            default = float(default)
+        default = self.format_value(default)
 
         try:
             # No keys provided -> return default
@@ -873,26 +950,71 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
 
             # Traverse the JSON structure safely
             current = self.json
+            key = ''
+            if _debug_enabled():
+                _console.print(f"\n:mag: [white on blue]current JSON data:[/] [white on green]{self.json}[/]")
             for seg in parts:
                 if isinstance(current, dict) and seg in current:
                     current = current[seg]
+                    key = seg
                     if not current and default:
+                        if auto_write:
+                            if _debug_enabled():
+                                _console.print(f"\n:information: [black on #00FFFF]Auto-writing default for missing key:[/] [white on blue]{seg}[/] [white on green]{default}[/]")
+                            self.write_config(*parts, value=default)
                         return default
-                    elif not current and isinstance(default, bool):
-                        return default
-                    elif current and str(current).isdigit():
-                        return int(current)
+                    # elif not current and isinstance(default, bool):
+                    #     if auto_write:
+                    #         if _debug_enabled():
+                    #             _console.print(f"\n:information: [black on #00FFFF]Auto-writing default for missing key:[/] [white on blue]{seg}[/] [white on green]{default}[/]")
+                    #         self.write_config(*parts, value=default)
+                    #     return default
+                    # elif current and str(current).isdigit():
+                    #     if auto_write and default and isinstance(default, int) and int(current) != int(default):
+                    #         if _debug_enabled():
+                    #             _console.print(f"\n:information: [black on #00FFFF]Auto-writing default for differing int key:[/] [white on blue]{seg}[/] [white on green]{default}[/]")
+                    #         self.write_config(*parts, value=int(current))
+                    #     return int(current)
                 else:
                     if _debug_enabled():
-                        _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{seg}[/]")
+                        _console.print(f"\n:warning: [black on #FFFF00]Key not found:[/] [white on blue]{seg}[/]")
+                    if auto_write and default is not None:
+                        if _debug_enabled():
+                            _console.print(f"\n:information: [black on #00FFFF]Auto-writing default for missing key:[/] [white on blue]{seg}[/] [white on green]{default}[/]")
+                        self.write_config(*parts, value=default)
+                    elif force_write:
+                        default = default if default is not None else ""
+                        if _debug_enabled():
+                            _console.print(f"\n:information: [black on #00FFFF]Force-writing default for missing key:[/] [white on blue]{seg}[/] [white on green]{default}[/]")
+                        self.write_config(*parts, value=default)
                     return default
 
+            
+            if not current and default is not None:
+                current = default
+                
+            if current: current = self.format_value(current)
+            
+            if current and auto_write:
+                if _debug_enabled():
+                    _console.print(f"\n:information: [black on #00FFFF]Auto-writing current for differing key:[/] [white on blue]{key}[/] [white on green]{current}[/]")
+                self.write_config(*parts, value=current)
+            if force_write:
+                if default and current != default:
+                    if _debug_enabled():
+                        _console.print(f"\n:information: [black on #00FFFF]Force-writing current for differing key:[/] [white on blue]{key}[/] [white on green]{current}[/]")
+                    self.write_config(*parts, value=current)
             return current
 
         except Exception as e:
             # Fail-safe: return default on unexpected error and optionally print debug info
             if _debug_enabled():
                 _console.print(f"\n:cross_mark: [white on red]Error getting config:[/] [white on blue]{e}[/]")
+            if os.getenv('traceback') in ['1', 'true', 'True']:
+                if HAS_RICH:
+                    _console.print_exception() # type: ignore
+                else:
+                    logger.error(f"TRACEBACK: {traceback.format_exc()}")
             return default
         
     def get_config_file(self):
@@ -908,16 +1030,20 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
     def get(self, *keys, default=None):
         """
         Alias for get_config.
-        The function `get` is an alias for `get_config` in Python.
+        The function `get` is an alias for `get_config` in Python. but with auto_write=True.
         
         :param key: The `key` parameter in the `get` method is used to specify the configuration key for
         which you want to retrieve the value. It is the identifier or name of the configuration setting
         that you are interested in accessing
+        :param auto_write: The `auto_write` parameter is a boolean flag that determines whether the
+        method should automatically write the default value to the configuration if the specified key
+        :param default: The `default` parameter in the `get` method is used to specify a default value that will be
+        returned if the requested configuration key is not found. If the key does not exist in the
         :return: The `get_config` method is being called with the provided `key` and any additional
         keyword arguments, and the result of that method call is being returned.
         """
         
-        return self.get_config(*keys, default=default)
+        return self.get_config(*keys, default=default, auto_write=True, force_write=True)
 
     def get_key(self, *keys, default=None):
         """
@@ -1667,6 +1793,16 @@ class ConfigSetYaml:
         
         return self.show()
     
+    def print_all_config(self):
+        """
+        Print all configuration settings.
+        The function `print_all_config` prints all configuration settings using the `show` method.
+        :return: The `print_all_config` method is returning the result of calling the `show` method on
+        the object itself.
+        """
+        
+        return self.show()
+    
     @property
     def filename(self):
         """
@@ -1677,6 +1813,17 @@ class ConfigSetYaml:
         """
         
         return str(self.yaml_file)
+    
+    @property
+    def configfile(self):
+        """
+        Get the configuration name (alias for filename).
+        The `configfilename` function returns the configuration name, which is an alias for the filename.
+        :return: The method `configfilename` is returning the value of `self.filename`, which is the
+        configuration name or alias for the filename.
+        """
+        
+        return self.filename
     
     @property
     def config_file(self):
@@ -2679,6 +2826,11 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
 
     @property
     def filename(self) -> str:
+        """Get absolute path of INI config file."""
+        return str(self._config_file_path)
+    
+    @property
+    def configfile(self) -> str:
         """Get absolute path of INI config file."""
         return str(self._config_file_path)
     
