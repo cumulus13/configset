@@ -40,10 +40,14 @@ else:
 
 try:
     from richcolorlog import setup_logging
-    logger = setup_logging(__name__)
+    logger = setup_logging(__name__, exceptions=['pika', 'urllib3', 'urllib2', 'urllib', 'chardet', 'requests', 'asyncio', 'websockets'])
 except Exception as e:
     import logging
     logger = logging.getLogger(__name__)
+    logging.getLogger("urllib3").setLevel(logging.CRITICAL)
+    logging.getLogger("urllib2").setLevel(logging.CRITICAL)
+    logging.getLogger("urllib").setLevel(logging.CRITICAL)
+    logging.getLogger("pika").setLevel(logging.CRITICAL)
     
 from dataclasses import dataclass
 
@@ -525,10 +529,18 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         """
         
         source = json_file or self.json_file
+        if _debug_enabled():
+            _console.print(f":mag: [bold #00FF00]Loading JSON config from:[/] [white on blue]{source}[/]")
         try:
             if os.path.isfile(source):
                 with open(source, "r", encoding="utf-8") as f:
-                    self.json = json.load(f)
+                    if _debug_enabled():
+                        _console.print(f"{source} -> f.read(): {f.read()}")
+                    data = f.read().strip()
+                    if not data:
+                        self.json = {}
+                        return self.json
+                    self.json = json.loads(data)
             elif isinstance(source, str) and "{" in source.strip():
                 self.json = json.loads(source)
             elif isinstance(source, bytes):
@@ -614,6 +626,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
             ConfigurationError: Raised if no JSON file is configured for saving.
             Exception: Raised if an error occurs during JSON saving or parsing.
         """
+        # self.json = self._load_config(json_file)
         
         target = json_file or self.json_file
         if not target:
@@ -668,10 +681,12 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
             IOError: If there is an error writing to the JSON file.
         """
         
-        if not self.json:
-            self.json = self._load_config(json_file)
-        with open(self.json_file, 'w', encoding='utf-8') as f:
-            json.dump(self.json, f, **kwargs)
+        # self.json = self._load_config(json_file)
+        if not self.json or not isinstance(self.json, (dict, list)):
+            self.json = {}
+        else:
+            with open(self.json_file, 'w', encoding='utf-8') as f:
+                json.dump(self.json, f, **kwargs)
         return self.json
 
     def dumps(self, *args, **kwargs):
@@ -891,17 +906,35 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         Raises:
             TypeError: If the value cannot be converted to a supported type.
         """
-        if value and isinstance(value, bytes):
+        if value is not None and isinstance(value, bytes):
+            if _debug_enabled():
+                _console.print(f"\n:information: [black on #00FFFF]Decoding bytes value:[/] [white on blue]{value}[/]")
             value = value.decode()
-        if value and isinstance(value, str) and str(value).isdigit():
+        if value is not None and isinstance(value, str) and str(value).isdigit():
+            if _debug_enabled():
+                _console.print(f"\n:information: [black on #00FFFF]Converting string to int:[/] [white on blue]{value}[/]")
             value = int(value)
-        elif value and isinstance(value, str) and str(value).replace(".", "").isdigit() and len(str(value).split(".")) == 2:
+        elif value is not None and isinstance(value, str) and str(value).replace(".", "").isdigit() and len(str(value).split(".")) == 2:
+            if _debug_enabled():
+                _console.print(f"\n:information: [black on #00FFFF]Converting string to float:[/] [white on blue]{value}[/]")
             value = float(value)
-        elif value and str(value).lower() in ['true', 'false']:
+        elif value is not None and str(value).lower() in ['true', 'false']:
+            if _debug_enabled():
+                _console.print(f"\n:information: [black on #00FFFF]Converting string to bool:[/] [white on blue]{value}[/]")
             value = str(value).lower() == 'true'
+        elif value is not None and str(value).lower() in ['null', 'none']:
+            if _debug_enabled():
+                _console.print(f"\n:information: [black on #00FFFF]Converting string to None:[/] [white on blue]{value}[/]")
+            value = None
+        elif value is not None and isinstance(value, bool):
+            if _debug_enabled():
+                _console.print(f"\n:information: [black on #00FFFF]Converting bool to string:[/] [white on blue]{value}[/]")
+            value = str(value).lower()
+        if _debug_enabled():
+            _console.print(f"\n:information: [black on #00FFFF]Formatted value:[/] [white on blue]{value}[/], type [white on blue]{type(value)}[/]")
         return value
     
-    def get_config(self, *keys, default=None, auto_write=False, force_write=False):
+    def get_config(self, *keys, default=None, auto_write=False, force_write=False, json_file = None):
         """
         Get configuration value by nested keys.
 
@@ -922,90 +955,55 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         that you are interested in accessing
         :param auto_write: The `auto_write` parameter is a boolean flag that determines whether the
         method should automatically write the default value to the configuration if the specified key
-        :param default: The `default` parameter in the `get` method is used to specify a default value that will be
-        returned if the requested configuration key is not found. If the key does not exist in the
-        :return: ke
-        """
-        if _debug_enabled():
-            _console.print(f"\n:mag: [white on blue]get_config called with keys:[/] [white on green]{keys}[/] [white on blue]and default:[/] [white on green]{default}[/]")
+        :param default: The `default` parameter in the `get` method is used to specify a default value 
+        that will be
+        :param force_write: The `force_write` parameter is a boolean flag that determines whether 
+        default is None or not the method should automatically write the default value
+        to the configuration
         
+        :return: string
+        
+        return with `default` if the requested configuration key is not found. If the key does not exist in the config file.
+        """
+        
+        if self.json is None or json_file:
+            self.json = self._load_config(json_file)
+
+        if _debug_enabled():
+            _console.print(f"[cyan]get_config called[/] keys={keys}, default={default}, auto_write={auto_write}, force_write={force_write}")
+
         default = self.format_value(default)
+        if not keys:
+            return default
 
         try:
-            # No keys provided -> return default
-            if not keys:
-                return default
-            
-            # Handle single list/tuple argument
+            # flatten keys
             if len(keys) == 1 and isinstance(keys[0], (list, tuple)):
                 keys = keys[0]
-        
-            # Build list of path segments from provided arguments.
-            # Support: multiple args, single composite string, list/tuple as single arg,
-            # and mixed args containing separators.
-            parts: List[str] = _flatten_keys(keys)
-
+            parts = _flatten_keys(keys)
             if not parts:
                 return default
 
-            # Traverse the JSON structure safely
             current = self.json
-            key = ''
-            if _debug_enabled():
-                _console.print(f"\n:mag: [white on blue]current JSON data:[/] [white on green]{self.json}[/]")
             for seg in parts:
                 if isinstance(current, dict) and seg in current:
                     current = current[seg]
-                    key = seg
-                    if not current and default:
-                        if auto_write:
-                            if _debug_enabled():
-                                _console.print(f"\n:information: [black on #00FFFF]Auto-writing default for missing key:[/] [white on blue]{seg}[/] [white on green]{default}[/]")
-                            self.write_config(*parts, value=default)
-                        return default
-                    # elif not current and isinstance(default, bool):
-                    #     if auto_write:
-                    #         if _debug_enabled():
-                    #             _console.print(f"\n:information: [black on #00FFFF]Auto-writing default for missing key:[/] [white on blue]{seg}[/] [white on green]{default}[/]")
-                    #         self.write_config(*parts, value=default)
-                    #     return default
-                    # elif current and str(current).isdigit():
-                    #     if auto_write and default and isinstance(default, int) and int(current) != int(default):
-                    #         if _debug_enabled():
-                    #             _console.print(f"\n:information: [black on #00FFFF]Auto-writing default for differing int key:[/] [white on blue]{seg}[/] [white on green]{default}[/]")
-                    #         self.write_config(*parts, value=int(current))
-                    #     return int(current)
                 else:
-                    if _debug_enabled():
-                        _console.print(f"\n:warning: [black on #FFFF00]Key not found:[/] [white on blue]{seg}[/]")
+                    # Key hilang -> tulis default jika diizinkan
                     if auto_write and default is not None:
-                        if _debug_enabled():
-                            _console.print(f"\n:information: [black on #00FFFF]Auto-writing default for missing key:[/] [white on blue]{seg}[/] [white on green]{default}[/]")
                         self.write_config(*parts, value=default)
                     elif force_write:
-                        default = default if default is not None else ""
-                        if _debug_enabled():
-                            _console.print(f"\n:information: [black on #00FFFF]Force-writing default for missing key:[/] [white on blue]{seg}[/] [white on green]{default}[/]")
-                        self.write_config(*parts, value=default)
+                        self.write_config(*parts, value=default if default is not None else "")
                     return default
 
-            
-            if not current and default is not None:
-                current = default
-                
-            if current: current = self.format_value(current)
-            
-            if current and auto_write:
-                if _debug_enabled():
-                    _console.print(f"\n:information: [black on #00FFFF]Auto-writing current for differing key:[/] [white on blue]{key}[/] [white on green]{current}[/]")
-                self.write_config(*parts, value=current)
-            if force_write:
-                if default and current != default:
-                    if _debug_enabled():
-                        _console.print(f"\n:information: [black on #00FFFF]Force-writing current for differing key:[/] [white on blue]{key}[/] [white on green]{current}[/]")
-                    self.write_config(*parts, value=current)
-            return current
+            current = self.format_value(current)
 
+            # Jika value kosong dan ada default, perlakukan sesuai flag
+            if (current is None or current == "") and (auto_write or force_write):
+                self.write_config(*parts, value=default if default is not None else "")
+                return default
+
+            return current
         except Exception as e:
             # Fail-safe: return default on unexpected error and optionally print debug info
             if _debug_enabled():
@@ -1015,7 +1013,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                     _console.print_exception() # type: ignore
                 else:
                     logger.error(f"TRACEBACK: {traceback.format_exc()}")
-            return default
+        return default
         
     def get_config_file(self):
         """
@@ -1043,7 +1041,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         keyword arguments, and the result of that method call is being returned.
         """
         
-        return self.get_config(*keys, default=default, auto_write=True, force_write=True)
+        return self.get_config(*keys, default=default, auto_write=True)#, force_write=False)
 
     def get_key(self, *keys, default=None):
         """
