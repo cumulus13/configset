@@ -339,6 +339,154 @@ def _validate_file_path(file_path: Union[str, Path]) -> Path:
     except (ValueError, OSError) as e:
         raise ConfigurationError(f"Invalid file path: {e}")
     
+def load_default(data:Any=None) -> Dict[str, Any]:
+    """
+    Load configuration data from various sources: dict, JSON/YAML/INI file paths or strings.
+    
+    Supports:
+    - Dict input
+    - File paths ending in .json/.yaml/.yml/.ini
+    - Raw JSON/YAML/INI strings
+    
+    Returns:
+    - A dictionary representation of the config.
+    """
+
+    if not data and self.default_config:
+        return self.default_config if isinstance(self.default_config, dict) else {}
+
+    valid_ext = (".ini", ".json", ".yaml", ".yml")
+    default_config = {}
+
+    if isinstance(data, bytes):
+        data = data.decode()
+
+    if isinstance(data, dict):
+        default_config = data
+    elif isinstance(data, str):
+        if os.path.isfile(data):
+            ext = os.path.splitext(data)[1].lower()
+            if ext in valid_ext:
+                try:
+                    if ext == ".json":
+                        with open(data, 'r', encoding='utf-8') as f:
+                            default_config = json.load(f)
+                    elif ext in (".yaml", ".yml"):
+                        with open(data, 'r', encoding='utf-8') as f:
+                            default_config = yaml.safe_load(f)
+                    elif ext == ".ini":
+                        config = configparser.ConfigParser()
+                        config.read(data, encoding='utf-8')
+                        default_config = {section: dict(config.items(section)) for section in config.sections()}
+                except Exception as e:
+                    if _debug_enabled():
+                        _console.print_exception()
+                    elif os.getenv('TRACEBACK', '0').lower() in ['1', 'true', 'yes']:
+                        print(traceback.format_exc())
+            else:
+                # Try to parse as raw string content
+                try:
+                    default_config = json.loads(data)
+                except Exception:
+                    try:
+                        default_config = yaml.safe_load(data)
+                    except Exception:
+                        try:
+                            config = configparser.ConfigParser()
+                            config.read_string(data)
+                            default_config = {section: dict(config.items(section)) for section in config.sections()}
+                        except Exception as e:
+                            if _debug_enabled():
+                                _console.print_exception()
+                            elif os.getenv('TRACEBACK', '0').lower() in ['1', 'true', 'yes']:
+                                print(traceback.format_exc())
+        else:
+            # Try to parse as raw string content
+            try:
+                default_config = json.loads(data)
+            except Exception:
+                try:
+                    default_config = yaml.safe_load(data)
+                except Exception:
+                    try:
+                        config = configparser.ConfigParser()
+                        config.read_string(data)
+                        default_config = {section: dict(config.items(section)) for section in config.sections()}
+                    except Exception as e:
+                        if _debug_enabled():
+                            _console.print_exception()
+                        elif os.getenv('TRACEBACK', '0').lower() in ['1', 'true', 'yes']:
+                            print(traceback.format_exc())
+    elif isinstance(data, (tuple, list)):
+        # Convert list/tuple to dict if needed
+        default_config = dict(enumerate(data))
+    else:
+        return {}
+
+    return default_config if isinstance(default_config, dict) else {}
+
+def get_default(self, *keys, default = None):
+    parts = _flatten_keys(keys)
+    key = None
+    _default = None
+    if default:
+        _default = load_default(default)
+    if not _default:
+        return None
+
+    current = _default
+    if current:
+        for seg in parts:
+            key = seg
+            if isinstance(current, dict) and seg in current:
+                current = current[seg]
+            
+        if current == _default:
+            current = None
+
+    return current
+
+def format_value(value:Any):
+    """Convert a value to its appropriate Python type.
+
+    Args:
+        value(Any): The value to format.
+
+    Returns:
+        Any: The formatted value.
+
+    """
+
+    if value is not None and isinstance(value, bytes):
+        if _debug_enabled():
+            _console.print(f"\n:information: [black on #00FFFF]Decoding bytes value:[/] [white on blue]{value}[/]")
+        value = value.decode()
+    if value is not None and isinstance(value, str) and str(value).isdigit():
+        if _debug_enabled():
+            _console.print(f"\n:information: [black on #00FFFF]Converting string to int:[/] [white on blue]{value}[/]")
+        value = int(value)
+    elif value is not None and isinstance(value, str) and str(value).replace(".", "").isdigit() and len(str(value).split(".")) == 2:
+        if _debug_enabled():
+            _console.print(f"\n:information: [black on #00FFFF]Converting string to float:[/] [white on blue]{value}[/]")
+        value = float(value)
+    elif value is not None and str(value).lower() in ['true', 'false']:
+        if _debug_enabled():
+            _console.print(f"\n:information: [black on #00FFFF]Converting string to bool:[/] [white on blue]{value}[/]")
+        value = str(value).lower() == 'true'
+    elif value is not None and str(value).lower() in ['null', 'none']:
+        if _debug_enabled():
+            _console.print(f"\n:information: [black on #00FFFF]Converting string to None:[/] [white on blue]{value}[/]")
+        value = None
+    elif value is not None and isinstance(value, bool):
+        if _debug_enabled():
+            _console.print(f"\n:information: [black on #00FFFF]Converting bool to string:[/] [white on blue]{value}[/]")
+        value = str(value).lower()
+    if _debug_enabled():
+        _console.print(f"\n:information: [black on #00FFFF]Formatted value:[/] [white on blue]{value}[/], type [white on blue]{type(value)}[/]")
+    
+    return value
+
+
 # The `ConfigurationError` class is a custom exception in Python that can be raised for
 # configuration-related errors.
 class ConfigurationError(Exception):
@@ -469,7 +617,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                  parse_int: Callable[[str], Any] = None,  # type: ignore
                  parse_constant: Callable[[str], Any] = None,  # type: ignore
                  strict: bool = True, 
-                 object_pairs_hook: Callable[[list[tuple[str, Any]]], Any] = None) -> None: # type: ignore
+                 object_pairs_hook: Callable[[list[tuple[str, Any]]], Any] = None, default: Any=None) -> None: # type: ignore
         """
         Initialize JSON configuration handler.
         
@@ -489,6 +637,10 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         self.json_file = json_file or config_file
         self.file = self.json_file    
         self.json = self._load_config()
+        self.default_config = {}
+        if default:
+            self.default_config = load_default(default)
+        self.default = self.default_config
         
     def load(self, json_file=None):
         """
@@ -610,7 +762,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         
         return self._load_config(json_file)
 
-    def _save_config(self, json_file=None) -> List:
+    def _save_config(self, data=None, **kwargs) -> List:
         """Saves the current configuration to a JSON file or parses a JSON string.
            The function `_save_config` saves the current configuration to a JSON file, handling
            exceptions and ensuring the parent directory exists.
@@ -628,37 +780,66 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         """
         # self.json = self._load_config(json_file)
         
-        target = json_file or self.json_file
-        if not target:
+        # target = json_file or self.json_file
+        if not self.json_file:
             raise ConfigurationError("No JSON file configured for saving")
-        if Path(target).is_file():
+        if not self.json:
+            with open(self.json_file, 'r', encoding="utf-8") as jf:
+                self.json = json.load(jf)
+
+        if Path(data).is_file():
             try:
                 # ensure parent dir exists
-                p = Path(target)
+                p = Path(data)
                 if not p.parent.exists():
                     p.parent.mkdir(parents=True, exist_ok=True)
-                with open(target, "w", encoding="utf-8") as f:
-                    json.dump(self.json if isinstance(self.json, (dict, list)) else {}, f, indent=2, ensure_ascii=False)
+                _data = json.
+                with open(data, "r", encoding="utf-8") as f:
+                    self.json.update(json.load(f))
+                    with open(self.json_file, "w", encoding="utf-8") as f:
+                        json.dump(self.json if isinstance(self.json, (dict, list)) else {}, f, indent=2, ensure_ascii=False)
             except Exception as e:
-                logger.error("Error saving JSON config: %s", e)
+                logger.error("Error saving config JSON from `file`: %s", e)
                 if _debug_enabled():
                     _console.print(f":cross_mark: [white on red]Error saving JSON config:[/] [white on blue]{e}[/]")
                 raise
-        elif isinstance(target, str or bytes) and "{" in target.strip():
+        elif isinstance(data, str or bytes) and "{" in data.strip():
+            if isinstance(data, bytes): data = data.decode()
+
             try:
-                self.json = json.loads(target)
+                _json = json.loads(data)
+                self.json.update(_json)
                 with open(self.json_file, "w", encoding="utf-8") as f:
                     json.dump(self.json if isinstance(self.json, (dict, list)) else {}, f, indent=2, ensure_ascii=False)
             except Exception as e:
-                logger.error("Error parsing JSON string: %s", e)
+                logger.error("Error saving config JSON from `string`: %s", e)
+                if _debug_enabled():
+                    _console.print(f":cross_mark: [white on red]Error parsing JSON string:[/] [white on blue]{e}[/]")
+                raise
+        elif isinstance(data, dict):
+            try:
+                self.json.update(data)
+                with open(self.json_file, "w", encoding="utf-8") as f:
+                    json.dump(self.json if isinstance(self.json, (dict, list)) else {}, f, indent=2, ensure_ascii=False)
+            except Exception as e:
+                logger.error("Error saving config JSON from `dict/json`: %s", e)
                 if _debug_enabled():
                     _console.print(f":cross_mark: [white on red]Error parsing JSON string:[/] [white on blue]{e}[/]")
                 raise
         else:
-            logger.error("Error saving JSON config, target is not a file or valid JSON string: %s", target)
+            logger.error("Error saving JSON config, data is not a file or valid JSON string: %s", data)
             if _debug_enabled():
-                _console.print(f":cross_mark: [white on red]Error saving JSON config, target is not a file or valid JSON string:[/] [white on blue]{target}[/]")
+                _console.print(f":cross_mark: [white on red]Error saving JSON config, data is not a file or valid JSON string:[/] [white on blue]{data}[/]")
             raise
+
+        _self_json = self.json
+        if kwargs:
+            for i in kwargs:
+                if not " " in i:
+                    self.json.update({i: kwargs.get(i)})
+            if not self.json == _self_json:
+                with open(self.json_file, "w", encoding="utf-8") as f:
+                    json.dump(self.json if isinstance(self.json, (dict, list)) else {}, f, indent=2, ensure_ascii=False)
         
         return [self.json, self.json_file]
 
@@ -892,51 +1073,10 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
             if _debug_enabled():
                 _console.print(f"\n:cross_mark: [white on red]Error getting config:[/] [white on blue]{e}[/]")
             return default
-        
-    def format_value(self, value):
-        """Convert a value to its appropriate Python type.
 
-        Args:
-            self(Any): The object itself.
-            value(Any): The value to format.
-
-        Returns:
-            Any: The formatted value.
-
-        Raises:
-            TypeError: If the value cannot be converted to a supported type.
-        """
-        if value is not None and isinstance(value, bytes):
-            if _debug_enabled():
-                _console.print(f"\n:information: [black on #00FFFF]Decoding bytes value:[/] [white on blue]{value}[/]")
-            value = value.decode()
-        if value is not None and isinstance(value, str) and str(value).isdigit():
-            if _debug_enabled():
-                _console.print(f"\n:information: [black on #00FFFF]Converting string to int:[/] [white on blue]{value}[/]")
-            value = int(value)
-        elif value is not None and isinstance(value, str) and str(value).replace(".", "").isdigit() and len(str(value).split(".")) == 2:
-            if _debug_enabled():
-                _console.print(f"\n:information: [black on #00FFFF]Converting string to float:[/] [white on blue]{value}[/]")
-            value = float(value)
-        elif value is not None and str(value).lower() in ['true', 'false']:
-            if _debug_enabled():
-                _console.print(f"\n:information: [black on #00FFFF]Converting string to bool:[/] [white on blue]{value}[/]")
-            value = str(value).lower() == 'true'
-        elif value is not None and str(value).lower() in ['null', 'none']:
-            if _debug_enabled():
-                _console.print(f"\n:information: [black on #00FFFF]Converting string to None:[/] [white on blue]{value}[/]")
-            value = None
-        elif value is not None and isinstance(value, bool):
-            if _debug_enabled():
-                _console.print(f"\n:information: [black on #00FFFF]Converting bool to string:[/] [white on blue]{value}[/]")
-            value = str(value).lower()
-        if _debug_enabled():
-            _console.print(f"\n:information: [black on #00FFFF]Formatted value:[/] [white on blue]{value}[/], type [white on blue]{type(value)}[/]")
-        return value
-    
     def get_config(self, *keys, default=None, auto_write=False, force_write=False, json_file = None):
         """
-        Get configuration value by nested keys.
+        Get configuration value of JSON by nested keys.
 
         Usage:
             get_config('a')                     -> top-level key 'a'
@@ -965,6 +1105,8 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         
         return with `default` if the requested configuration key is not found. If the key does not exist in the config file.
         """
+
+        key = None
         
         if self.json is None or json_file:
             self.json = self._load_config(json_file)
@@ -972,7 +1114,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         if _debug_enabled():
             _console.print(f"[cyan]get_config called[/] keys={keys}, default={default}, auto_write={auto_write}, force_write={force_write}")
 
-        default = self.format_value(default)
+        default = format_value(default)
         if not keys:
             return default
 
@@ -980,27 +1122,58 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
             # flatten keys
             if len(keys) == 1 and isinstance(keys[0], (list, tuple)):
                 keys = keys[0]
+                if _debug_enabled(): _console.print(f"🗝 [bold #00FFFF]keys[/]=[bold #FFFF00]{keys}[/]")
             parts = _flatten_keys(keys)
+            if _debug_enabled(): _console.print(f"🧰 [bold #00FFFF]parts[/]=[bold #FFFF00]{parts}[/]")
             if not parts:
                 return default
 
+            # Ensure YAML root is a mapping
+            if not isinstance(self.json, dict):
+                try:
+                    self._load_config()
+                except Exception as e:
+                    if os.getenv('TRACEBACK') and os.getenv('TRACEBACK') in ['1', 'true', 'True']:
+                        _console.print(f":biohazard_sign {traceback.format_exc()}")
+                    elif _debug_enabled():
+                        _console.print(f":cross_mark: [white on red]ERROR:[/] [white on blue]{e}[/]")
+
+                    self.json = {}
+            if self.json is None:
+                self.json = {}
+
             current = self.json
             for seg in parts:
+                key = seg
                 if isinstance(current, dict) and seg in current:
                     current = current[seg]
-                else:
-                    # Key hilang -> tulis default jika diizinkan
-                    if auto_write and default is not None:
-                        self.write_config(*parts, value=default)
-                    elif force_write:
-                        self.write_config(*parts, value=default if default is not None else "")
-                    return default
+                # else:
+                #     # Key hilang -> tulis default jika diizinkan
+                #     if (auto_write and default is not None) or force_write:
+                #         # self.write_config(*parts, value=default)
+                #         self.write_config(*parts, value=default if default is not None else "")
+                #     # elif force_write:
+                #     #     self.write_config(*parts, value=default if default is not None else "")
+                #     if _debug_enabled(): _console.print(f"⭐ [bold #00FFFF]default[/]=[bold #FFFF00]{default}[/]")
+                #     # return default
+        
+            if current == self.json:
+                current = None
+                if self.default: current = self.get_default(*keys, default=self.default)    
 
-            current = self.format_value(current)
+            current = format_value(current)
+            if _debug_enabled(): _console.print(f"🗝 [bold #00FFFF]current[/]=[bold #FFFF00]{current}[/]")
+            if _debug_enabled(): _console.print(f"🧰 [bold #00FFFF]key[/]=[bold #FFFF00]{key}[/]")
 
             # Jika value kosong dan ada default, perlakukan sesuai flag
-            if (current is None or current == "") and (auto_write or force_write):
-                self.write_config(*parts, value=default if default is not None else "")
+            if current is None or current == "":
+                if (default is not None and auto_write) or force_write:
+                    self.write_config(*parts, value=default if default is not None else "")    
+                    return default
+                elif key and self.default and self.default.get(key):
+                    return self.default.get(key)
+            
+            if default is not None:
                 return default
 
             return current
@@ -1096,7 +1269,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         
         return self.get_config(*keys, default=default)
 
-    def write_config(self, *keys, value: Any = None) -> bool:
+    def write_config(self, *keys, value: Any = None, **kwargs) -> bool:
         """
         Write configuration value by nested keys (JSON backend).
 
@@ -1104,6 +1277,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
           - write_config('a.b.c', 'value')
           - write_config('a','b','c', value='value')
           - write_config('a','b','c','value')  (last positional becomes value if value kw not used)
+          - write_config(key=value)
 
         Behavior:
           - flexible key formats: dotted or separators (.,:,;,|)
@@ -1132,13 +1306,15 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                 return False
 
             # Normalize iterable (support single list/tuple arg or multiple args)
-            if len(parts_src) == 1 and isinstance(parts_src[0], (list, tuple)):
-                iterable = parts_src[0]
-            else:
-                iterable = parts_src
+            # if len(parts_src) == 1 and isinstance(parts_src[0], (list, tuple)):
+            #     iterable = parts_src[0]
+            # else:
+            #     iterable = parts_src
 
             # Flatten and split by separators using shared helper
-            parts: List[str] = _flatten_keys(iterable)
+            # parts: List[str] = _flatten_keys(iterable)
+            parts: List[str] = _flatten_keys(parts_src)
+            
             if not parts:
                 if _debug_enabled():
                     _console.print("\n:cross_mark: [bold #FFFF00]No key ![/]")
@@ -1153,7 +1329,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
             for k in parts[:-1]:
                 if k not in d or not isinstance(d[k], dict):
                     d[k] = {}
-                d = d[k]
+                # d = d[k]
             d[parts[-1]] = value
 
             self._save_config()
@@ -1588,11 +1764,16 @@ class ConfigSetYaml:
         separators to avoid ambiguity.
     """
     
-    def __init__(self, yaml_file: str = '', config_file: str = '', **kwargs):
+    def __init__(self, yaml_file: str = '', config_file: str = '', default:Any = None, **kwargs):
         self.yaml_file = yaml_file or config_file
         self.file = self.yaml_file
         self.kwargs = kwargs
         self.yaml = self._load_config()
+
+        self.default_config = {}
+        if default:
+            self.default_config = load_default(default)
+        self.default = self.default_config
 
     def load(self, yaml_file=None):
         """
@@ -1897,7 +2078,7 @@ class ConfigSetYaml:
     
     def get_config(self, *keys, default=None):
         """
-        Get configuration value by nested keys (YAML backend).
+        Get configuration value of YAML by nested keys (YAML backend).
 
         Usage:
             get_config('a')                     -> top-level key 'a'
@@ -1912,24 +2093,15 @@ class ConfigSetYaml:
         becomes ['k1','k2','k3','k4','k5']).
         """
         
-        if default and isinstance(default, bytes):
-            default = default.decode()
-        
-        if default and isinstance(default, str) and str(default).isdigit():
-            default = int(default)
-        
-        if default and isinstance(default, str) and str(default).replace(".", "").isdigit():
-            default = float(default)
+        default = format_value(default)
+        if not keys:
+            return default
         
         try:
-            # No keys provided -> return default
-            if not keys:
-                return default
-
             # Handle single list/tuple argument (legacy callers)
             if len(keys) == 1 and isinstance(keys[0], (list, tuple)):
                 keys = keys[0]
-
+                if _debug_enabled(): _console.print(f"🗝 [bold #00FFFF]keys[/]=[bold #FFFF00]{keys}[/]")
             # Build flattened list of path segments
             parts: List[str] = _flatten_keys(keys)
             if not parts:
@@ -1939,26 +2111,51 @@ class ConfigSetYaml:
             if not isinstance(self.yaml, dict):
                 try:
                     self._load_config()
-                except Exception:
+                except Exception as e:
+                    if os.getenv('TRACEBACK') and os.getenv('TRACEBACK') in ['1', 'true', 'True']:
+                        _console.print(f":biohazard_sign {traceback.format_exc()}")
+                    elif _debug_enabled():
+                        _console.print(f":cross_mark: [white on red]ERROR:[/] [white on blue]{e}[/]")
                     self.yaml = {}
+
             if self.yaml is None:
                 self.yaml = {}
 
             # Traverse the YAML structure safely
             current = self.yaml
+            
             for seg in parts:
                 if isinstance(current, dict) and seg in current:
                     current = current[seg]
-                    if not current and default:
-                        return default
-                    elif not current and isinstance(default, bool):
-                        return default
-                    elif current and str(current).isdigit():
-                        return int(current)
-                else:
-                    if _debug_enabled():
-                        _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{seg}[/]")
+                    # if not current and default:
+                    #     return default
+                    # elif not current and isinstance(default, bool):
+                    #     return default
+                    # elif current and str(current).isdigit():
+                    #     return int(current)
+                # else:
+                #     if _debug_enabled():
+                #         _console.print(f"\n:cross_mark: [white on red]Key not found:[/] [white on blue]{seg}[/]")
+                #     return default
+
+            if current == self.json:
+                current = None
+                if self.default: current = self.get_default(*keys, default=self.default)    
+
+            current = format_value(current)
+            if _debug_enabled(): _console.print(f"🗝 [bold #00FFFF]current[/]=[bold #FFFF00]{current}[/]")
+            if _debug_enabled(): _console.print(f"🧰 [bold #00FFFF]key[/]=[bold #FFFF00]{key}[/]")
+
+            # Jika value kosong dan ada default, perlakukan sesuai flag
+            if current is None or current == "":
+                if (default is not None and auto_write) or force_write:
+                    self.write_config(*parts, value=default if default is not None else "")    
                     return default
+                elif key and self.default and self.default.get(key):
+                    return self.default.get(key)
+            
+            if default is not None:
+                return default
 
             return current
 
@@ -2787,11 +2984,12 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
     Replace or stub those dependencies when using the class in isolation.
     """
     
-    def __init__(self, config_file: str = '', auto_write: bool = True, config_dir: str = '', config_name: str = '', **kwargs):
+    def __init__(self, config_file: str = '', auto_write: bool = True, config_dir: str = '', config_name: str = '', default:Any = None, **kwargs):
         super().__init__(**kwargs)
         
         self.allow_no_value = True
         self.optionxform = str
+        self.default_config = {}
         
         # Determine config file path
         if not config_file:
@@ -2821,6 +3019,11 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
             self._load_config()
             if os.getenv('SHOW_CONFIGNAME'):
                 _console.print(f":japanese_symbol_for_beginner: [#FFFF00]CONFIG FILE:[/] [bold #00FFFF]{self._config_file_path}[/]")
+
+        self.default_config = {}
+        if default:
+            self.default_config = load_default(default)
+        self.default = self.default_config
 
     @property
     def filename(self) -> str:
