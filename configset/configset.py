@@ -486,7 +486,6 @@ def format_value(value:Any):
     
     return value
 
-
 # The `ConfigurationError` class is a custom exception in Python that can be raised for
 # configuration-related errors.
 class ConfigurationError(Exception):
@@ -641,6 +640,8 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         if default:
             self.default_config = load_default(default)
         self.default = self.default_config
+
+        self.json_obj = self.json.copy()
         
     def load(self, json_file=None):
         """
@@ -681,8 +682,10 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         """
         
         source = json_file or self.json_file
+        
         if _debug_enabled():
-            _console.print(f":mag: [bold #00FF00]Loading JSON config from:[/] [white on blue]{source}[/]")
+            _console.print(f"🔎 [bold #00FF00]Loading JSON config from:[/] [white on blue]{source}[/]")
+        
         try:
             if os.path.isfile(source):
                 with open(source, "r", encoding="utf-8") as f:
@@ -698,39 +701,34 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
             elif isinstance(source, bytes):
                 self.json = json.loads(source.decode())
             else:
-                with open(source, "w", encoding="utf-8") as f:
-                    json.dump({}, f, ensure_ascii=False, indent=4)
-                return {}
+                if os.path.isfile(self.json_file):
+                    with open(self.json_file, "r", encoding="utf-8") as f:
+                        self.json = json.dump(f, ensure_ascii=False, indent=4)
             return self.json
-        # except Exception as e:
-        #     self.json = {}
-        #     if _debug_enabled():
-        #         _console.print(f":cross_mark: [white on red]Error loading JSON config:[/] [white on blue]{e}[/]")
+        
         except FileNotFoundError:
             if _debug_enabled():
-                _console.print(f"[:cross_mark: [white on red]Config file not found:[/] [white on blue]{source}[/]")
-            logger.warning(f"Config file not found: {source}")
+                _console.print(f"❌ [white on red]Config file not found:[/] [white on blue]{source}[/]")
+            logger.warning(f"⚠ Config file not found: {source}")
             # Create empty config or use defaults
         except PermissionError:
             if _debug_enabled():
                 _console.print(f":cross_mark: [white on red]Permission denied accessing:[/] [white on blue]{source}[/]")
-            logger.error(f"Permission denied accessing: {source}")
+            logger.error(f"❌ Permission denied accessing: {source}")
             raise ConfigurationError(f"Cannot access config file: {source}")
         except UnicodeDecodeError as e:
             if _debug_enabled:
                 _console.print(f":cross_mark: [white on red]Invalid encoding in config file:[/] [white on blue]{e}[/]")
-            logger.error(f"Invalid encoding in config file: {e}")
+            logger.error(f"❌ Invalid encoding in config file: {e}")
             raise ConfigurationError(f"Config file has invalid encoding: {e}")
         except Exception as e:
             if _debug_enabled:
                 _console.print(f":cross_mark: [white on red]Unexpected error loading config:[/] [white on blue]{e}[/]")
-            logger.error(f"Unexpected error loading config: {e}")
+            logger.error(f"❌ Unexpected error loading config: {e}")
             if os.getenv('traceback') in ['1', 'true', 'True']:
-                if HAS_RICH:
-                    _console.print_exception() # type: ignore
-                else:
-                    logger.error(f"TRACEBACK: {traceback.format_exc()}")
-            raise ConfigurationError(f"Failed to load configuration: {e}")
+                _console.print_exception() # type: ignore
+                
+            raise ConfigurationError(f"❌ Failed to load configuration: {e}")
         self.json = {}
         return self.json
     
@@ -762,7 +760,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         
         return self._load_config(json_file)
 
-    def _save_config(self, data=None, **kwargs) -> List:
+    def _save_config(self, data=None, force_write = False, **kwargs) -> List:
         """Saves the current configuration to a JSON file or parses a JSON string.
            The function `_save_config` saves the current configuration to a JSON file, handling
            exceptions and ensuring the parent directory exists.
@@ -780,20 +778,24 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         """
         # self.json = self._load_config(json_file)
         
-        # target = json_file or self.json_file
+        _self_json = {}
+
+        if _debug_enabled():
+            _console.print(f":info: data = {data}, force_write = {force_write}, kwargs = {kwargs}")
+
         if not self.json_file:
             raise ConfigurationError("No JSON file configured for saving")
         if not self.json:
             with open(self.json_file, 'r', encoding="utf-8") as jf:
                 self.json = json.load(jf)
 
-        if Path(data).is_file():
+        if data and Path(data).is_file():
             try:
                 # ensure parent dir exists
                 p = Path(data)
                 if not p.parent.exists():
                     p.parent.mkdir(parents=True, exist_ok=True)
-                _data = json.
+                # _data = json.
                 with open(data, "r", encoding="utf-8") as f:
                     self.json.update(json.load(f))
                     with open(self.json_file, "w", encoding="utf-8") as f:
@@ -803,41 +805,54 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                 if _debug_enabled():
                     _console.print(f":cross_mark: [white on red]Error saving JSON config:[/] [white on blue]{e}[/]")
                 raise
-        elif isinstance(data, str or bytes) and "{" in data.strip():
+        elif data and isinstance(data, str or bytes) and "{" in data.strip():
             if isinstance(data, bytes): data = data.decode()
 
             try:
                 _json = json.loads(data)
-                self.json.update(_json)
-                with open(self.json_file, "w", encoding="utf-8") as f:
-                    json.dump(self.json if isinstance(self.json, (dict, list)) else {}, f, indent=2, ensure_ascii=False)
+                _self_json.update(_json)
+                # with open(self.json_file, "w", encoding="utf-8") as f:
+                #     json.dump(self.json if isinstance(self.json, (dict, list)) else {}, f, indent=2, ensure_ascii=False)
             except Exception as e:
                 logger.error("Error saving config JSON from `string`: %s", e)
                 if _debug_enabled():
                     _console.print(f":cross_mark: [white on red]Error parsing JSON string:[/] [white on blue]{e}[/]")
                 raise
-        elif isinstance(data, dict):
+        elif data and isinstance(data, dict):
             try:
-                self.json.update(data)
-                with open(self.json_file, "w", encoding="utf-8") as f:
-                    json.dump(self.json if isinstance(self.json, (dict, list)) else {}, f, indent=2, ensure_ascii=False)
+                _self_json.update(data)
+                # self.json.update(data)
+                # with open(self.json_file, "w", encoding="utf-8") as f:
+                #     json.dump(self.json if isinstance(self.json, (dict, list)) else {}, f, indent=2, ensure_ascii=False)
             except Exception as e:
                 logger.error("Error saving config JSON from `dict/json`: %s", e)
                 if _debug_enabled():
                     _console.print(f":cross_mark: [white on red]Error parsing JSON string:[/] [white on blue]{e}[/]")
                 raise
         else:
-            logger.error("Error saving JSON config, data is not a file or valid JSON string: %s", data)
-            if _debug_enabled():
-                _console.print(f":cross_mark: [white on red]Error saving JSON config, data is not a file or valid JSON string:[/] [white on blue]{data}[/]")
-            raise
+            if self.default and force_write:
+                logger.error("can't saving JSON config, use default config instead")    
+                _self_json = self.default
+            # else:
+            #     logger.error(f"Error saving JSON config, data is not a valid object: {data}")
+            #     if _debug_enabled():
+            #         _console.print(f":cross_mark: [white on red]Error saving JSON config, data is not a file or valid JSON string:[/] [white on blue]{data}[/]")
+            #     raise
 
-        _self_json = self.json
         if kwargs:
+            # _self_json = self.json.copy()
             for i in kwargs:
                 if not " " in i:
-                    self.json.update({i: kwargs.get(i)})
-            if not self.json == _self_json:
+                    _self_json.update({i: kwargs.get(i)})
+
+        if _self_json:
+            self.json.update(_self_json)
+            with open(self.json_file, "w", encoding="utf-8") as f:
+                json.dump(self.json if isinstance(self.json, (dict, list)) else {}, f, indent=2, ensure_ascii=False)
+        else:
+            if self.json == self.json_obj:
+                _console.print(f"⚠ no data to save !")
+            else:
                 with open(self.json_file, "w", encoding="utf-8") as f:
                     json.dump(self.json if isinstance(self.json, (dict, list)) else {}, f, indent=2, ensure_ascii=False)
         
@@ -1010,14 +1025,6 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
         except Exception:
             _console.print("\n:cross_mark: [white on red]Invalid Json File ![/]")
             return False
-    
-    # def get_config(self, key, **kwargs):
-    #     """Get configuration value by key"""
-    #     if isinstance(self.json, dict):
-    #         return self.json.get(key, None)
-    #     else:
-    #         _console.print(f"\n:cross_mark: [white on red]Invalid Json File ![/]")
-    #         return None
     
     def get_config1(self, *keys, default=None, **kwargs):
         """
@@ -1314,7 +1321,7 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
             # Flatten and split by separators using shared helper
             # parts: List[str] = _flatten_keys(iterable)
             parts: List[str] = _flatten_keys(parts_src)
-            
+
             if not parts:
                 if _debug_enabled():
                     _console.print("\n:cross_mark: [bold #FFFF00]No key ![/]")
@@ -1326,13 +1333,17 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
 
             # Traverse and set nested value
             d = self.json
-            for k in parts[:-1]:
+            # for k in parts[:-1]:
+            for k in parts:
                 if k not in d or not isinstance(d[k], dict):
                     d[k] = {}
-                # d = d[k]
+                d = d[k]
             d[parts[-1]] = value
 
+            self.json.update(d)
+            
             self._save_config()
+            
             return True
 
         except Exception as e:
@@ -1341,6 +1352,9 @@ class ConfigSetJson(JSONDecoder, JSONEncoder):
                     _console.print(f"\n:cross_mark: [white on red]Error writing config:[/] [white on blue]{e}[/]")
                 else:
                     _console.print(f":cross_mark: [white on red]Error writing config:[/] [white on blue]{e}[/]")
+            if os.getenv('TRACEBACK', '0').lower() in ['1', 'yes', 'true']:
+                # _console.print(f":biohazard_sign {traceback.format_exc()}")
+                _console.print_exception()
             return False
         
     def set(self, *keys, value: Any = None):
@@ -2663,11 +2677,24 @@ class AttrDict(dict):
         Raises:
             AttributeError: Raised if the attribute is not found.
         """
+        # if name in self:
+        #     val = self[name]
+        #     if isinstance(val, dict):
+        #         return AttrDict(val)
+        #     return val
+
         if name in self:
             val = self[name]
-            if isinstance(val, dict):
-                return AttrDict(val)
+            if isinstance(val, dict) and not isinstance(val, AttrDict):
+                self[name] = AttrDict(val)
+                return self[name]
             return val
+        
+        # Auto-create nested AttrDict for missing attributes
+        if not name.startswith('_'):
+            self[name] = AttrDict()
+            return self[name]
+        
         raise AttributeError(f"{self.__class__.__name__!s} has no attribute {name!r}")
 
     def __setattr__(self, name, value):
@@ -2683,10 +2710,17 @@ class AttrDict(dict):
         Raises:
             TypeError: If the attribute name is not a string or the value cannot be assigned.
         """
-        self[name] = value
-        # Automatically create nested AttrDicts for new dict values
-        if isinstance(value, dict):
-            self[name] = AttrDict(value)
+        # self[name] = value
+        # # Automatically create nested AttrDicts for new dict values
+        # if isinstance(value, dict):
+        #     self[name] = AttrDict(value)
+
+        if name.startswith('_'):
+            super().__setattr__(name, value)
+        else:
+            self[name] = value
+            if isinstance(value, dict) and not isinstance(value, AttrDict):
+                self[name] = AttrDict(value)
 
 # small helper proxies for nicer dot-access with INI backend
 class _IniSectionProxy:
@@ -2824,7 +2858,7 @@ class _IniOptionProxy:
         """
         return f"<INI option proxy {self._option}>"
 
-class ConfigSetIni(configparser.RawConfigParser): # type: ignore
+class ConfigSetIni(configparser.ConfigParser): # type: ignore
     """
     ConfigSetIni
     ============
@@ -2861,7 +2895,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         configuration file. If the directory does not exist it will be created.
     - config_name: Optional name used when config_dir is supplied; otherwise the
         resolved config_file path/name is used.
-    - **kwargs: Additional kwargs passed to RawConfigParser (e.g. interpolation
+    - **kwargs: Additional kwargs passed to ConfigParser (e.g. interpolation
         settings).
     Properties / Attributes
     -----------------------
@@ -2984,46 +3018,254 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
     Replace or stub those dependencies when using the class in isolation.
     """
     
-    def __init__(self, config_file: str = '', auto_write: bool = True, config_dir: str = '', config_name: str = '', default:Any = None, **kwargs):
+    def __init__(
+        self,
+        config_file: Union[str, configparser.RawConfigParser, None] = None,
+        *,
+        defaults: Union[dict[str, dict[str, Any]], str, Path, None] = None,
+        write_default: bool = False,
+        auto_write: bool = True,
+        config_dir: str = '',
+        config_name: str = '',
+        **kwargs
+    ):
         super().__init__(**kwargs)
-        
+
         self.allow_no_value = True
         self.optionxform = str
-        self.default_config = {}
-        
-        # Determine config file path
-        if not config_file:
-            script_path = sys.argv[0] if sys.argv else 'config'
-            config_file = os.path.splitext(os.path.realpath(script_path))[0] + ".ini"
-        
-        if not config_file.endswith('.ini'):
-            config_file += '.ini'
-            
-        # Use _config_file_path to avoid property conflict
-        self._config_file_path = Path(config_file).resolve()
-        self.config_name = Path(config_name).resolve() if config_name else self._config_file_path
         self._auto_write = auto_write
-        
-        # Create file if it doesn't exist and auto_write is enabled
-        if not self._config_file_path.exists() and auto_write:
-            self._config_file_path.touch()
-        
-        if config_dir:
-            config_dir_path = Path(config_dir).resolve()
-            if not config_dir_path.exists():
-                config_dir_path.mkdir(parents=True, exist_ok=True)
-            self._config_file_path = config_dir_path / self.config_name.name  
-                
-        # Load existing configuration
-        if self._config_file_path.exists():
-            self._load_config()
-            if os.getenv('SHOW_CONFIGNAME'):
-                _console.print(f":japanese_symbol_for_beginner: [#FFFF00]CONFIG FILE:[/] [bold #00FFFF]{self._config_file_path}[/]")
 
-        self.default_config = {}
-        if default:
-            self.default_config = load_default(default)
-        self.default = self.default_config
+        if isinstance(config_file, bytes):
+            config_file = config_file.decode()
+
+        # tentukan lokasi file target
+        self._config_file: Path | None = None
+        if isinstance(config_file, str):
+            self._config_file = Path(config_file).resolve()
+        elif config_file is None and config_dir and config_name:
+            self._config_file = Path(config_dir).resolve() / Path(config_name).name
+
+        # siapkan defaults (dict, file, atau URL)
+        defaults_dict: dict[str, dict[str, Any]] | None = None
+        if defaults:
+            if isinstance(defaults, (str, Path)):
+                dpath = str(defaults)
+                if dpath.startswith(("http://", "https://", "file://")):
+                    # ambil dari URL
+                    with urllib.request.urlopen(dpath) as resp:
+                        text = resp.read().decode("utf-8")
+
+                    if dpath.endswith(".json"):
+                        defaults_dict = json.loads(text)
+                    elif dpath.endswith((".yaml", ".yml")):
+                        if not yaml:
+                            raise RuntimeError("PyYAML is required to load YAML defaults")
+                        defaults_dict = yaml.safe_load(text)
+                    elif dpath.endswith((".ini", ".cfg")):
+                        tmp = configparser.ConfigParser()
+                        tmp.read_string(text)
+                        defaults_dict = {s: dict(tmp.items(s)) for s in tmp.sections()}
+                    else:
+                        raise ValueError(f"Unsupported defaults type from URL: {dpath}")
+                else:
+                    # local file
+                    path = Path(dpath)
+                    # print(f"path.suffix.lower(): {path.suffix.lower()}")
+                    
+                    if not path.exists():
+                        # raise FileNotFoundError(f"Defaults file not found: {path}")
+                        _console.print(f":warning: file '{path}' not found ! and will not use as defaults config !")
+                    if path.suffix.lower() == ".json" and path.exists():
+                        try:
+                            with open(path, "r", encoding="utf-8") as f:
+                                data = json.load(f)
+                                defaults_dict = self.json_to_configparser_dict(data)
+                                if _debug_enabled():
+                                   print(f"data: {data} type: {type(data)} defaults_dict [0]: {defaults_dict}, type: {type(defaults_dict)}") 
+                        except Exception as e:
+                            if os.getenv('TRACEBACK', '0').lower() in ['1', 'true', 'yes']:
+                                print(traceback.format_exc())
+                    elif path.suffix.lower() in {".yaml", ".yml"} and path.exists():
+                        if not yaml:
+                            raise RuntimeError("PyYAML is required to load YAML defaults")
+                        with open(path, "r", encoding="utf-8") as f:
+                            defaults_dict = yaml.safe_load(f)
+                    elif path.suffix.lower() in {".ini", ".cfg"} and path.exists():
+                        tmp = configparser.ConfigParser()
+                        tmp.read(path)
+                        defaults_dict = {s: dict(tmp.items(s)) for s in tmp.sections()}
+                    else:
+                        if path.exists():
+                            # raise ValueError(f"Unsupported defaults file type: {path.suffix}")
+                            _console.print(f":warning: Unsupported defaults file type: {path.suffix}")
+            elif isinstance(defaults, dict):
+                # cek jika dict nested atau flat
+                if all(isinstance(v, dict) for v in defaults_dict.values()):
+                    self.read_dict(defaults_dict)
+                else:
+                    # flat dict → wrap di section 'default'
+                    self.read_dict({"default": defaults_dict})
+            else:
+                raise TypeError("defaults must be dict, JSON/YAML/INI file path/URL, or None")
+
+            if _debug_enabled():
+               print(f"defaults_dict: {defaults_dict}, type: {type(defaults_dict)}") 
+            if defaults_dict:
+                self.read_dict(defaults_dict)
+                self._defaults = defaults_dict
+
+        # case 1: file path
+        if isinstance(config_file, str):
+            if self._config_file.exists():
+                self.read(self._config_file)
+            else:
+                self._config_file.parent.mkdir(parents=True, exist_ok=True)
+                if defaults_dict and write_default:
+                    self.read_dict(defaults_dict)
+                    with open(self._config_file, "w", encoding="utf-8") as f:
+                        self.write(f)
+                else:
+                    self._config_file.touch()
+
+        # case 2: dari parser instance
+        elif isinstance(config_file, configparser.RawConfigParser):
+            self.read_dict({
+                s: dict(config_file.items(s))
+                for s in config_file.sections()
+            })
+
+        # case 3: None → hanya load defaults (jika ada)
+        elif config_file is None and defaults_dict:
+            self.read_dict(defaults_dict)
+            if self._config_file and write_default:
+                self._config_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(self._config_file, "w", encoding="utf-8") as f:
+                    self.write(f)
+
+        elif config_file is not None and not isinstance(config_file, str):
+            raise TypeError(
+                f"Unsupported type: {type(config_file).__name__}. "
+                "config_file must be a path, ConfigParser/RawConfigParser instance, or None"
+            )
+
+    def json_to_configparser_dict(self, data: dict) -> dict:
+        """Convert arbitrary JSON dict into dict suitable for ConfigParser.read_dict()"""
+        result = {}
+
+        # cek apakah top-level dict sudah section: dict
+        if all(isinstance(v, dict) for v in data.values()):
+            # nested dict, langsung gunakan
+            for section, opts in data.items():
+                result[section] = {k: json.dumps(v) if isinstance(v, (dict, list)) else str(v)
+                                   for k, v in opts.items()}
+        else:
+            # flat dict → wrap di section default
+            result["default"] = {k: json.dumps(v) if isinstance(v, (dict, list)) else str(v)
+                                 for k, v in data.items()}
+            if not self.has_section('default'): self.add_section('default')
+
+        return result
+
+    def set(self, section: str, option: str = None, value: Any = None):
+        """Override set() → auto_write jika aktif"""
+        if not self.has_section(section):
+            self.add_section(section)
+        if not option:
+            return self.options(section)
+            
+        super().set(section, option, str(value) if value is not None else "")
+
+        if self._auto_write and self._config_file:
+            self.save()
+
+    def save(self, filename: Union[str, Path, None] = None):
+        """Simpan perubahan ke file"""
+        if not self._config_file and not filename:
+            raise ValueError("No target file specified for saving config")
+
+        path = Path(filename or self._config_file)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            self.write(f)
+
+    def load_default(self):
+        if isinstance(defaults, (str, Path)):
+            dpath = str(defaults)
+            if dpath.startswith(("http://", "https://", "file://")):
+                # ambil dari URL
+                with urllib.request.urlopen(dpath) as resp:
+                    text = resp.read().decode("utf-8")
+
+                if dpath.endswith(".json"):
+                    self.defaults_dict = json.loads(text)
+                elif dpath.endswith((".yaml", ".yml")):
+                    if not yaml:
+                        raise RuntimeError("PyYAML is required to load YAML defaults")
+                    self.defaults_dict = yaml.safe_load(text)
+                elif dpath.endswith((".ini", ".cfg")):
+                    tmp = configparser.ConfigParser()
+                    tmp.read_string(text)
+                    self.defaults_dict = {s: dict(tmp.items(s)) for s in tmp.sections()}
+                else:
+                    raise ValueError(f"Unsupported defaults type from URL: {dpath}")
+            else:
+                # local file
+                path = Path(dpath)
+                # print(f"path.suffix.lower(): {path.suffix.lower()}")
+                
+                if not path.exists():
+                    # raise FileNotFoundError(f"Defaults file not found: {path}")
+                    _console.print(f":warning: file '{path}' not found ! and will not use as defaults config !")
+                if path.suffix.lower() == ".json" and path.exists():
+                    try:
+                        with open(path, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                            self.defaults_dict = self.json_to_configparser_dict(data)
+                            if _debug_enabled():
+                               print(f"data: {data} type: {type(data)} self.defaults_dict [0]: {self.defaults_dict}, type: {type(self.defaults_dict)}") 
+                    except Exception as e:
+                        if os.getenv('TRACEBACK', '0').lower() in ['1', 'true', 'yes']:
+                            print(traceback.format_exc())
+                elif path.suffix.lower() in {".yaml", ".yml"} and path.exists():
+                    if not yaml:
+                        raise RuntimeError("PyYAML is required to load YAML defaults")
+                    with open(path, "r", encoding="utf-8") as f:
+                        self.defaults_dict = yaml.safe_load(f)
+                elif path.suffix.lower() in {".ini", ".cfg"} and path.exists():
+                    tmp = configparser.ConfigParser()
+                    tmp.read(path)
+                    self.defaults_dict = {s: dict(tmp.items(s)) for s in tmp.sections()}
+                else:
+                    if path.exists():
+                        # raise ValueError(f"Unsupported defaults file type: {path.suffix}")
+                        _console.print(f":warning: Unsupported defaults file type: {path.suffix}")
+        elif isinstance(defaults, dict):
+            # cek jika dict nested atau flat
+            if all(isinstance(v, dict) for v in self.defaults_dict.values()):
+                self.read_dict(self.defaults_dict)
+            else:
+                # flat dict → wrap di section 'default'
+                self.read_dict({"default": self.defaults_dict})
+        else:
+            raise TypeError("defaults must be dict, JSON/YAML/INI file path/URL, or None")
+
+        if _debug_enabled():
+           print(f"self.defaults_dict: {self.defaults_dict}, type: {type(self.defaults_dict)}") 
+        if self.defaults_dict:
+            self.read_dict(self.defaults_dict)
+            self._defaults = self.defaults_dict
+
+        return self.defaults_dict
+
+    def write_default(self):
+        if self.defaults_dict:
+            self.read_dict(self.defaults_dict)
+            if self._config_file:
+                self._config_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(self._config_file, "w", encoding="utf-8") as f:
+                    self.write(f)
+            else:
+                _console.print(f":cross_mark: [bold #FFFF00]No support:[/] '[bold #00FFFF]{self._config_file}'[/] !")
 
     @property
     def filename(self) -> str:
@@ -3105,6 +3347,9 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         except Exception as e:
             if _debug_enabled():
                 _console.print(f":cross_mark: [white on red]Error saving config:[/] [white on blue]{e}[/]")
+
+    def save(self):
+        return self._save_config()
 
     def print_all_config(self, sections: List[str] = []) -> List[Tuple[str, Dict]]:
         """
@@ -3302,7 +3547,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         else:
             return self.print_all_config()
         
-    def get_config(self, section: str, option: str, 
+    def get_config(self, section: str, option: str = '', 
                   default: Any = None, auto_write: bool = False, value: Any = None) -> Any:
         """
         Get configuration value with automatic type conversion.
@@ -3318,11 +3563,24 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
             Configuration value with appropriate type conversion
         """
         if value is not None: default = value
+        if not option and "." in section:
+            section, option = section.split(".", 1)
+        if option and "." in section:
+            value = option
+            default = value
+            section, option = section.split(".", 1)
+
+        if section and not option:
+            _console.print(f":cross_mark: [white on red]not option ![/]")
+            return default
+
         if auto_write is None:
             auto_write = self._auto_write
             
         try:
             value = super().get(section, option)
+            if not value and default is not None:
+                return default
             return self._convert_value(value)
         except (configparser.NoSectionError, configparser.NoOptionError):
             if auto_write and default is not None:
@@ -3334,7 +3592,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
                 return ''
             return default
         
-    def get(self, section: str, option: str, 
+    def get(self, section: str, option: str = '', 
              default: Any = None, auto_write: bool = True) -> Any:
         """
         Alias for get_config to maintain compatibility with previous versions.
@@ -4107,6 +4365,10 @@ class ConfigMeta(type):
             Exception: Generic exception during config file handling or attribute access.
         """
         # debug(attrs = attrs)
+        # Initialize data as AttrDict for nested access
+        if 'data' not in attrs:
+            attrs['data'] = AttrDict()
+        
         # Determine config file name from class attributes (if provided)
         config_file = attrs.get('CONFIGFILE') or attrs.get('configname') or ''
 
@@ -4170,18 +4432,31 @@ class ConfigMeta(type):
             wrapper.__name__ = method_name
             return classmethod(wrapper)
 
-        # expose public callable attributes of the instance as classmethods
-        for name in dir(config_instance):
-            # if name.startswith('_'):
-            #     continue
-            if name in attrs:
-                continue
-            try:
-                attr = getattr(config_instance, name)
-            except Exception:
-                continue
-            if callable(attr):
-                attrs[name] = make_classmethod_from_instance(name, original=attr)
+
+
+        # # expose public callable attributes of the instance as classmethods
+        # for name in dir(config_instance):
+        #     # if name.startswith('_'):
+        #     #     continue
+        #     if name in attrs:
+        #         continue
+        #     try:
+        #         attr = getattr(config_instance, name)
+        #     except Exception:
+        #         continue
+        #     if callable(attr):
+        #         attrs[name] = make_classmethod_from_instance(name, original=attr)
+
+        # Add methods from config instance
+        if config_instance:
+            for attr_name in dir(config_instance):
+                if not attr_name.startswith('_') and attr_name not in attrs:
+                    try:
+                        attr = getattr(config_instance, attr_name)
+                        if callable(attr):
+                            attrs[attr_name] = make_classmethod_from_instance(attr_name, attr)
+                    except Exception:
+                        continue
 
         return super().__new__(mcs, name, bases, attrs)
 
@@ -4200,13 +4475,21 @@ class ConfigMeta(type):
         """
         
         debug(cls__config_instance = cls._config_instance)
-        if hasattr(cls, '_config_instance') and hasattr(cls._config_instance, name):
-            attr = getattr(cls._config_instance, name)
-            debug(attr = attr)
-            if callable(attr):
-                # return a wrapper that calls the instance method
-                return lambda *args, **kwargs: attr(*args, **kwargs)
-            return attr
+        # if hasattr(cls, '_config_instance') and hasattr(cls._config_instance, name):
+        #     attr = getattr(cls._config_instance, name)
+        #     debug(attr = attr)
+        #     if callable(attr):
+        #         # return a wrapper that calls the instance method
+        #         return lambda *args, **kwargs: attr(*args, **kwargs)
+        #     return attr
+
+        if hasattr(cls, '_config_instance'):
+            inst = cls._config_instance
+            if hasattr(inst, name):
+                attr = getattr(inst, name)
+                if callable(attr):
+                    return lambda *args, **kwargs: attr(*args, **kwargs)
+                return attr
         
         # INI: prefer section proxy (CONFIG.section.option), otherwise option proxy (CONFIG.option.section)
         elif hasattr(cls, '_config_instance') and isinstance(cls._config_instance, ConfigSetINI):
@@ -4243,8 +4526,36 @@ class ConfigMeta(type):
             if hasattr(cls._config_instance, 'get_document'):
                 return cls._config_instance.get_document(name)
 
-        if hasattr(cls, 'data') and name in cls.data:
-            return cls.data[name] # type: ignore
+        # if hasattr(cls, 'data') and name in cls.data:
+        #     return cls.data[name] # type: ignore
+
+        # if hasattr(cls, 'data') and name in cls.data:
+        #     val = cls.data[name]
+        #     if isinstance(val, dict):
+        #         return AttrDict(val)
+        #     return val
+        
+        # # For nested access, create an AttrDict if it doesn't exist
+        # if hasattr(cls, 'data') and not name.startswith('_'):
+        #     cls.data[name] = AttrDict()
+        #     return cls.data[name]
+
+        # Ensure data exists
+        if not hasattr(cls, 'data'):
+            cls.data = AttrDict()
+
+        # Check data attribute
+        if name in cls.data:
+            val = cls.data[name]
+            if isinstance(val, dict) and not isinstance(val, AttrDict):
+                cls.data[name] = AttrDict(val)
+                return cls.data[name]
+            return val
+        
+        # For nested access, create an AttrDict if it doesn't exist
+        if not name.startswith('_') and name not in ['data', 'config', 'CONFIGFILE', 'INDENT']:
+            cls.data[name] = AttrDict()
+            return cls.data[name]
             
         raise AttributeError(f"'{cls.__name__}' has no attribute '{name}'")
 
@@ -4270,6 +4581,16 @@ class ConfigMeta(type):
                 try:
                     new_inst = ConfigSet(value)
                     cls._config_instance = new_inst
+                    
+                    if hasattr(new_inst, 'get_all'):
+                        try:
+                            loaded_data = new_inst.get_all()
+                            if isinstance(loaded_data, dict):
+                                cls.data.update(AttrDict(loaded_data))
+                        except Exception:
+                            pass
+                    
+                    super().__setattr__(name, value)
                     return
                 except Exception:
                     # Fall back to asking existing instance to change file if possible
@@ -4277,6 +4598,7 @@ class ConfigMeta(type):
                     if inst is not None and hasattr(inst, 'set_config_file'):
                         try:
                             inst.set_config_file(value)
+                            super().__setattr__(name, value)
                             return
                         except Exception:
                             pass
@@ -4286,7 +4608,168 @@ class ConfigMeta(type):
 
         if os.getenv('DEBUG') in ['1', 'true', 'True']:
             print("Saving ....")
-        super().__setattr__(name, value)
+        # super().__setattr__(name, value)
+
+        # Handle data attributes
+        if not name.startswith('_') and name not in ['data', 'config', 'CONFIGFILE', 'INDENT']:
+            # Ensure data exists
+            if not hasattr(cls, 'data'):
+                cls.data = AttrDict()
+            
+            # Handle nested assignments like 'db.engine'
+            if '.' in name:
+                parts = name.split('.', 1)
+                parent_name = parts[0]
+                child_path = parts[1]
+                
+                # Ensure parent exists as AttrDict
+                if parent_name not in cls.data:
+                    cls.data[parent_name] = AttrDict()
+                elif not isinstance(cls.data[parent_name], AttrDict):
+                    cls.data[parent_name] = AttrDict(cls.data[parent_name] if isinstance(cls.data[parent_name], dict) else {})
+                
+                # Handle nested path
+                current = cls.data[parent_name]
+                path_parts = child_path.split('.')
+                
+                # Navigate to the parent of the final key
+                for part in path_parts[:-1]:
+                    if part not in current:
+                        current[part] = AttrDict()
+                    elif not isinstance(current[part], AttrDict):
+                        current[part] = AttrDict(current[part] if isinstance(current[part], dict) else {})
+                    current = current[part]
+                
+                # Set the final value
+                final_key = path_parts[-1]
+                current[final_key] = value
+                
+                # Persist to config file
+                cls._persist_to_config()
+            else:
+                # Simple assignment
+                cls.data[name] = value
+                cls._persist_to_config()
+        else:
+            # Normal class attribute assignment
+            super().__setattr__(name, value)
+
+    def _persist_to_config(cls):
+        """Persist data to the configuration file."""
+        if hasattr(cls, '_config_instance') and cls._config_instance:
+            config_inst = cls._config_instance
+            
+            try:
+                if isinstance(config_inst, ConfigSetJson) or hasattr(config_inst, 'json'):
+                    # For JSON configs, save the entire data structure
+                    for key, value in cls.data.items():
+                        if isinstance(value, AttrDict):
+                            # Convert AttrDict to regular dict for JSON serialization
+                            dict_value = dict(value)
+                            config_inst.set(key, value=dict_value)
+                        else:
+                            config_inst.set(key, value=value)
+                
+                elif isinstance(config_inst, ConfigSetIni) or hasattr(config_inst, 'write_config'):
+                    # For INI configs, flatten nested structure
+                    for key, value in cls.data.items():
+                        if isinstance(value, AttrDict):
+                            # For nested data, create sections
+                            for subkey, subvalue in value.items():
+                                config_inst.write_config(key, subkey, subvalue)
+                        else:
+                            config_inst.write_config('DEFAULT', key, value)
+                
+                elif isinstance(config_inst, ConfigSetYaml) or hasattr(config_inst, 'yaml'):
+                    # For YAML configs, save the structure directly
+                    for key, value in cls.data.items():
+                        if isinstance(value, AttrDict):
+                            dict_value = dict(value)
+                            config_inst.set(key, value=dict_value)
+                        else:
+                            config_inst.set(key, value=value)
+            
+            except Exception as e:
+                if _debug_enabled():
+                    print(f"Error persisting config: {e}")
+
+    def get(cls, key, default=None):
+        """Get a configuration value with dot notation support."""
+        # print(f"hasattr(cls, '_config_instance'): {hasattr(cls, '_config_instance')}")
+        # print(f"cls._config_instance: {cls._config_instance}")
+        # print(f"key: {key}")
+        # print(f"default: {default}")
+
+        if not hasattr(cls, '_config_instance') or not cls._config_instance:
+            return default
+            
+        config_inst = cls._config_instance
+        
+        # # Handle dot notation
+        # if '.' in key:
+        #     parts = key.split('.')
+            
+        #     try:
+        #         if isinstance(config_inst, ConfigSetIni):
+        #             # For INI: first part is section, rest is option path
+        #             section = parts[0]
+        #             option = '.'.join(parts[1:])
+        #             return config_inst.get_config(section, option, default=default)
+        #         else:
+        #             # For JSON/YAML: use nested key access
+        #             return config_inst.get_config(*parts, default=default)
+        #     except Exception:
+        #         return default
+        # else:
+        #     try:
+        #         return config_inst.get_config(key, default=default)
+        #     except Exception:
+        #         return default
+
+        try:
+            # Handle dot notation
+            if '.' in key:
+                parts = key.split('.')
+                
+                if isinstance(config_inst, ConfigSetIni):
+                    # For INI: first part is section, rest is option path
+                    section = parts[0]
+                    option = '.'.join(parts[1:]) if len(parts) > 1 else parts[0]
+                    result = config_inst.get_config(section, option, default=default)
+                else:
+                    # For JSON/YAML: use nested key access
+                    result = config_inst.get_config(*parts, default=default)
+            else:
+                # Simple key access
+                if isinstance(config_inst, ConfigSetIni):
+                    result = config_inst.get_config('DEFAULT', key, default=default)
+                else:
+                    result = config_inst.get_config(key, default=default)
+            
+            # If we got a result that's not the default, return it
+            if result != default and result is not None:
+                return result
+                
+        except Exception as e:
+            if _debug_enabled():
+                print(f"Error getting config value for '{key}': {e}")
+
+        # Fallback to in-memory data or default
+        if hasattr(cls, 'data') and cls.data:
+            if '.' in key:
+                # Handle nested key access in data
+                parts = key.split('.')
+                current = cls.data
+                for part in parts:
+                    if isinstance(current, dict) and part in current:
+                        current = current[part]
+                    else:
+                        return default
+                return current
+            else:
+                return cls.data.get(key, default)
+        
+        return default
 
     # def show(cls):
     #     """Show current configuration."""
@@ -4383,7 +4866,8 @@ class CONFIG(metaclass=ConfigMeta):
     INDENT: int = 4
     
     config = ConfigSet()
-    data: Dict[str, Any] = {}
+    # data: Dict[str, Any] = {}
+    data: AttrDict = AttrDict()
     
     def __init__(self, config_file: str = None): # type: ignore
         """Initialize the configuration.
@@ -4400,7 +4884,9 @@ class CONFIG(metaclass=ConfigMeta):
         """
         
         if config_file:
-            self.config = ConfigSet(config_file)
+            # self.config = ConfigSet(config_file)
+            self.__class__.CONFIGFILE = config_file
+            self.__class__._config_instance = ConfigSet(config_file)
         elif self.CONFIGFILE:
             self.config = ConfigSet(config_file)
             self.config_file = self.CONFIGFILE
@@ -4417,6 +4903,8 @@ class CONFIG(metaclass=ConfigMeta):
         Raises:
             AttributeError: Raised if the attribute is not found and cannot be created.
         """
+
+        # print(f"name: {name}")
         
         if name in self.data:
             return self.data[name]
@@ -4428,37 +4916,76 @@ class CONFIG(metaclass=ConfigMeta):
         _console.print(f":cross_mark: [white on red]Attribute not found:[/] [white on blue]{name}[/]")
         raise AttributeError(f"'{self.__class__.__name__}' has no attribute '{name}'")
     
-    def __setattr__(self, name: str, value: Any) -> None:
-        """Set an attribute in the object, saving to JSON if applicable.
+    # def __setattr__(self, name: str, value: Any) -> None:
+    #     """Set an attribute in the object, saving to JSON if applicable.
 
-        Args:
-            name(str): Attribute name.
-            value(Any): Attribute value.
+    #     Args:
+    #         name(str): Attribute name.
+    #         value(Any): Attribute value.
 
-        Returns:
-            None: No explicit return value.
+    #     Returns:
+    #         None: No explicit return value.
 
-        Raises:
-            Warning: Issued if the object is not configured to support JSON configuration files.
-        """
+    #     Raises:
+    #         Warning: Issued if the object is not configured to support JSON configuration files.
+    #     """
         
+    #     if name.startswith('_') or name in ['data', 'config', 'CONFIGFILE', 'INDENT']:
+    #         super().__setattr__(name, value)
+    #     else:
+    #         print(f"type(self.config): {type(self.config)}")
+    #         self.data[name] = value
+    #         if isinstance(self.config, ConfigSetJson) or isinstance(self.config, ConfigSetYaml):
+    #             self.config.set(name, value)
+    #         elif isinstance(self.config, ConfigSetIni):
+    #             value = re.split(r"[:;| ]", value)
+    #             if len(value) > 2:
+    #                 self.config.set(name, dict(zip(value[::2], value[1::2])))
+    #             else:
+    #                 self.config.set(name, value[0])
+    #         # if hasattr(self, '_json_file'):
+    #         #     self._save_json()
+    #         # else:
+    #         #     warnings.warn("This only supports JSON configuration file!", Warning)
+
+    def __setattr__(self, name: str, value: Any) -> None:
         if name.startswith('_') or name in ['data', 'config', 'CONFIGFILE', 'INDENT']:
             super().__setattr__(name, value)
         else:
-            print(f"type(self.config): {type(self.config)}")
-            self.data[name] = value
-            if isinstance(self.config, ConfigSetJson) or isinstance(self.config, ConfigSetYaml):
-                self.config.set(name, value)
-            elif isinstance(self.config, ConfigSetIni):
-                value = re.split(r"[:;| ]", value)
-                if len(value) > 2:
-                    self.config.set(name, dict(zip(value[::2], value[1::2])))
-                else:
-                    self.config.set(name, value[0])
-            # if hasattr(self, '_json_file'):
-            #     self._save_json()
-            # else:
-            #     warnings.warn("This only supports JSON configuration file!", Warning)
+            # --- PERUBAHAN DIMULAI DI SINI ---
+            # Jika nilai yang ditetapkan adalah string dan mengandung titik,
+            # kita asumsikan ini adalah penugasan bersarang seperti `db.engine = 'value'`
+            if isinstance(value, str) and '.' in name:
+                parts = name.split('.', 1)  # Pisahkan hanya pada titik pertama
+                parent_name = parts[0]
+                child_name = parts[1]
+
+                # Pastikan parent (misal: 'db') ada di self.data, jika belum buat sebagai AttrDict
+                if parent_name not in self.data or not isinstance(self.data[parent_name], AttrDict):
+                    self.data[parent_name] = AttrDict()
+
+                # Tetapkan nilai ke child (misal: 'engine')
+                self.data[parent_name][child_name] = value
+
+                # Simpan ke backend sesuai tipe
+                if isinstance(self.config, (ConfigSetJson, ConfigSetYaml)):
+                    # Untuk JSON/YAML, simpan seluruh struktur parent
+                    self.config.set(parent_name, self.data[parent_name])
+                elif isinstance(self.config, ConfigSetIni):
+                    # Untuk INI, simpan sebagai section.option
+                    self.config.set(parent_name, child_name, value)
+            else:
+                # Perilaku lama untuk penugasan biasa
+                self.data[name] = value
+                if isinstance(self.config, ConfigSetJson) or isinstance(self.config, ConfigSetYaml):
+                    self.config.set(name, value)
+                elif isinstance(self.config, ConfigSetIni):
+                    # Split value if it contains separators (existing logic)
+                    value_list = re.split(r"[:;| ]", value)
+                    if len(value_list) > 2:
+                        self.config.set(name, dict(zip(value_list[::2], value_list[1::2])))
+                    else:
+                        self.config.set(name, value_list[0] if value_list else value)
 
 def create_argument_parser() -> argparse.ArgumentParser:
     """Create an argument parser for the configuration file management tool.

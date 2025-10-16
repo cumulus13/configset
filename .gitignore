@@ -28,3 +28,15 @@ test2.ini
 
 # Added entries (1 items)
 test_configset.py
+
+# Added entries (1 items)
+*test_configset_*
+
+# Added entries (1 items)
+*sublime*
+
+# Added entries (1 items)
+*.py.2
+
+# Added entries (1 items)
+test/
