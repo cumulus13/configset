@@ -36,3 +36,6 @@ test/
 
 # Added entries (1 items)
 *.py.2
+
+# Ignore Sublime Text project files
+*.sublime-*

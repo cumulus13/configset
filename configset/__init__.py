@@ -59,25 +59,45 @@ from pathlib import Path
 
 from .configset import (
     ConfigSet,
+    configset,
     CONFIG, 
     MultiOrderedDict,
     ConfigMeta,
     create_argument_parser,
     main,
-    _debug_enabled,
+    is_debug,
     ConfigSetJson,
     ConfigSetJSON,
     ConfigSetYaml,
     ConfigSetYAML,
     ConfigSetIni,
     ConfigSetINI,
-    _validate_file_path,
-    detect_file_type,
-    HAS_JSONCOLOR,
-    HAS_RICH,
-    HAS_MAKECOLOR
+    
 )
 
+from .configset_hash import Hash
+
+get_hash = Hash.get_hash
+verify_hash = Hash.verify_hash
+update_hash = Hash.update_hash
+_compute_file_hash = Hash._compute_file_hash
+_resolve_hash_path = Hash._resolve_hash_path
+
+from .configset_general import (
+    _validate_file_path,
+    detect_file_type,
+    _get_mtime,
+    load_default,
+    get_default,
+    format_value,
+    
+)
+
+from .printer import (
+    HAS_JSONCOLOR,
+    HAS_RICH,
+    HAS_MAKE_COLORS
+)
 
 def get_version():
     """
@@ -133,7 +153,17 @@ __all__ = [
     # Utility functions
     'create_argument_parser',
     'main',
-    '_debug_enabled',
+    'is_debug',
+
+    '_compute_file_hash',
+    '_resolve_hash_path',
+    'get_hash',
+    'verify_hash',
+    'update_hash',
+    '_get_mtime',
+    'load_default',
+    'get_default',
+    'format_value'
     
 ]
 
@@ -206,26 +236,26 @@ def _init_package():
     """Initialize package-level settings."""
     
     # Set debug mode if environment variable is set
-    if _debug_enabled():
+    if is_debug():
         print(f"ConfigSet v{__version__} - Debug mode enabled")
     
     # Check for optional dependencies and warn if missing
     try:
         import rich
     except ImportError:
-        if _debug_enabled():
+        if is_debug():
             print("Optional dependency 'rich' not found - enhanced output disabled")
     
     try:
         import jsoncolor
     except ImportError:
-        if _debug_enabled():
+        if is_debug():
             print("Optional dependency 'jsoncolor' not found - JSON coloring disabled")
     
     try:
         import make_colors
     except ImportError:
-        if _debug_enabled():
+        if is_debug():
             print("Optional dependency 'make_colors' not found - color output disabled")
 
 # Run package initialization
