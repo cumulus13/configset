@@ -1271,6 +1271,124 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
     #     # Return as string
     #     return value
     
+    # def _convert_value(self, value: Any) -> Any:
+    #     """Convert string values into tuple, list, dict, bool, int, float, or str."""
+    #     if not isinstance(value, str):
+    #         return value
+
+    #     val_trimmed = value.strip()
+    #     if not val_trimmed:
+    #         return ""
+
+    #     # 1. Dictionaries: {...}
+    #     if val_trimmed.startswith('{') and val_trimmed.endswith('}'):
+    #         try:
+    #             return json.loads(val_trimmed)
+    #         except Exception:
+    #             try:
+    #                 parsed = ast.literal_eval(val_trimmed)
+    #                 if isinstance(parsed, dict):
+    #                     return parsed
+    #             except Exception:
+    #                 pass
+
+    #     # 2. Parenthesized Tuples: (...)
+    #     if val_trimmed.startswith('(') and val_trimmed.endswith(')'):
+    #         try:
+    #             parsed = ast.literal_eval(val_trimmed)
+    #             if isinstance(parsed, tuple):
+    #                 return parsed
+    #         except Exception:
+    #             pass
+    #         inner = val_trimmed[1:-1].strip()
+    #         if not inner:
+    #             return ()
+    #         items = re.split(r',\s*', inner)
+    #         return tuple(self._convert_value(item.strip()) for item in items if item.strip())
+
+    #     # 3. Bracketed Lists: [...]
+    #     if val_trimmed.startswith('[') and val_trimmed.endswith(']'):
+    #         try:
+    #             return json.loads(val_trimmed)
+    #         except Exception:
+    #             try:
+    #                 parsed = ast.literal_eval(val_trimmed)
+    #                 if isinstance(parsed, list):
+    #                     return parsed
+    #             except Exception:
+    #                 pass
+    #         inner = val_trimmed[1:-1].strip()
+    #         if not inner:
+    #             return []
+    #         items = re.split(r',\s*', inner)
+    #         return [self._convert_value(item.strip()) for item in items if item.strip()]
+
+    #     # 4. Unparenthesized Comma-Separated Values: 111, 222, 333 or '222', '333', '444'
+    #     if ',' in val_trimmed:
+    #         try:
+    #             parsed = ast.literal_eval(val_trimmed)
+    #             if isinstance(parsed, tuple):
+    #                 return parsed
+    #         except Exception:
+    #             pass
+    #         items = re.split(r',\s*', val_trimmed)
+    #         if len(items) > 1:
+    #             return tuple(self._convert_value(item.strip()) for item in items if item.strip())
+
+    #     # 5. Space-Separated Sequences / Mixed Quoted Tokens: '888' 999 "000" or 777 888 999
+    #     if ' ' in val_trimmed and not ('\n' in val_trimmed):
+    #         try:
+    #             import shlex
+    #             tokens = shlex.split(val_trimmed)
+    #             if len(tokens) > 1:
+    #                 has_quotes = "'" in val_trimmed or '"' in val_trimmed
+    #                 all_numeric = all(
+    #                     t.isdigit() or (t.startswith('-') and t[1:].isdigit()) or t.replace('.', '', 1).isdigit()
+    #                     for t in tokens
+    #                 )
+    #                 if has_quotes or all_numeric:
+    #                     return [self._convert_value(t) for t in tokens]
+    #         except Exception:
+    #             pass
+
+    #     # 6. Multiline values
+    #     if '\n' in val_trimmed:
+    #         items = re.split(r'\n+', val_trimmed)
+    #         return [self._convert_value(item.strip()) for item in items if item.strip()]
+
+    #     # 7. Key-Value pairs: k1: v1, k2: v2
+    #     if ':' in val_trimmed and ',' in val_trimmed:
+    #         pairs = re.split(r',\s*', val_trimmed)
+    #         result_dict = {}
+    #         valid_pair = False
+    #         for pair in pairs:
+    #             if ':' in pair:
+    #                 k, v = pair.split(':', 1)
+    #                 result_dict[k.strip()] = self._convert_value(v.strip())
+    #                 valid_pair = True
+    #         if valid_pair:
+    #             return result_dict
+
+    #     # 8. Booleans
+    #     lowercased = val_trimmed.lower()
+    #     if lowercased in ('true', 'yes', '1'):
+    #         return True
+    #     elif lowercased in ('false', 'no', '0'):
+    #         return False
+
+    #     # 9. Numerics (handling leading zeros as integers if unquoted)
+    #     if val_trimmed.isdigit() or (val_trimmed.startswith('-') and val_trimmed[1:].isdigit()):
+    #         return int(val_trimmed)
+
+    #     try:
+    #         if '.' in val_trimmed:
+    #             return float(val_trimmed)
+    #     except ValueError:
+    #         pass
+
+    #     # 10. Fallback string
+    #     return value
+
     def _convert_value(self, value: Any) -> Any:
         """Convert string values into tuple, list, dict, bool, int, float, or str."""
         if not isinstance(value, str):
@@ -1280,65 +1398,123 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         if not val_trimmed:
             return ""
 
+        # Helper: Bracket- and quote-aware top-level splitting
+        def _smart_split(text: str, delimiter: str = ',') -> List[str]:
+            tokens = []
+            current = []
+            in_single_quote = False
+            in_double_quote = False
+            bracket_depth = 0
+            paren_depth = 0
+            brace_depth = 0
+
+            for char in text:
+                if char == "'" and not in_double_quote:
+                    in_single_quote = not in_single_quote
+                    current.append(char)
+                elif char == '"' and not in_single_quote:
+                    in_double_quote = not in_double_quote
+                    current.append(char)
+                elif not in_single_quote and not in_double_quote:
+                    if char == '[':
+                        bracket_depth += 1
+                    elif char == ']':
+                        bracket_depth -= 1
+                    elif char == '(':
+                        paren_depth += 1
+                    elif char == ')':
+                        paren_depth -= 1
+                    elif char == '{':
+                        brace_depth += 1
+                    elif char == '}':
+                        brace_depth -= 1
+
+                    if char == delimiter and bracket_depth == 0 and paren_depth == 0 and brace_depth == 0:
+                        tokens.append("".join(current).strip())
+                        current = []
+                    else:
+                        current.append(char)
+                else:
+                    current.append(char)
+
+            if current:
+                token = "".join(current).strip()
+                if token:
+                    tokens.append(token)
+            return tokens
+
+        # Helper: Evaluates literals safely after normalizing multiline INI whitespace
+        def _eval_literal(val: str) -> Any:
+            try:
+                return json.loads(val)
+            except Exception:
+                pass
+            try:
+                return ast.literal_eval(val)
+            except Exception:
+                pass
+            # Normalize multiline newlines and indentation from INI files
+            normalized = re.sub(r'\s+', ' ', val)
+            try:
+                return json.loads(normalized)
+            except Exception:
+                pass
+            try:
+                return ast.literal_eval(normalized)
+            except Exception:
+                pass
+            return None
+
         # 1. Dictionaries: {...}
         if val_trimmed.startswith('{') and val_trimmed.endswith('}'):
-            try:
-                return json.loads(val_trimmed)
-            except Exception:
-                try:
-                    parsed = ast.literal_eval(val_trimmed)
-                    if isinstance(parsed, dict):
-                        return parsed
-                except Exception:
-                    pass
+            parsed = _eval_literal(val_trimmed)
+            if isinstance(parsed, dict):
+                return parsed
 
         # 2. Parenthesized Tuples: (...)
         if val_trimmed.startswith('(') and val_trimmed.endswith(')'):
-            try:
-                parsed = ast.literal_eval(val_trimmed)
-                if isinstance(parsed, tuple):
-                    return parsed
-            except Exception:
-                pass
+            parsed = _eval_literal(val_trimmed)
+            if isinstance(parsed, tuple):
+                return parsed
             inner = val_trimmed[1:-1].strip()
             if not inner:
                 return ()
-            items = re.split(r',\s*', inner)
-            return tuple(self._convert_value(item.strip()) for item in items if item.strip())
+            items = _smart_split(inner, ',')
+            return tuple(self._convert_value(item) for item in items if item)
 
-        # 3. Bracketed Lists: [...]
+        # 3. Bracketed Lists: [...] (Handles nested lists like `animes` and string lists like `movies`)
         if val_trimmed.startswith('[') and val_trimmed.endswith(']'):
-            try:
-                return json.loads(val_trimmed)
-            except Exception:
-                try:
-                    parsed = ast.literal_eval(val_trimmed)
-                    if isinstance(parsed, list):
-                        return parsed
-                except Exception:
-                    pass
+            parsed = _eval_literal(val_trimmed)
+            if isinstance(parsed, list):
+                return parsed
             inner = val_trimmed[1:-1].strip()
             if not inner:
                 return []
-            items = re.split(r',\s*', inner)
-            return [self._convert_value(item.strip()) for item in items if item.strip()]
+            items = _smart_split(inner, ',')
+            return [self._convert_value(item) for item in items if item]
 
         # 4. Unparenthesized Comma-Separated Values: 111, 222, 333 or '222', '333', '444'
         if ',' in val_trimmed:
+            parsed = _eval_literal(val_trimmed)
+            if isinstance(parsed, tuple):
+                return parsed
+            items = _smart_split(val_trimmed, ',')
+            if len(items) > 1:
+                return tuple(self._convert_value(item) for item in items if item)
+
+        # 5. Standalone Quoted Strings: 'text' or "text"
+        if (val_trimmed.startswith("'") and val_trimmed.endswith("'")) or \
+           (val_trimmed.startswith('"') and val_trimmed.endswith('"')):
             try:
                 parsed = ast.literal_eval(val_trimmed)
-                if isinstance(parsed, tuple):
+                if isinstance(parsed, str):
                     return parsed
             except Exception:
-                pass
-            items = re.split(r',\s*', val_trimmed)
-            if len(items) > 1:
-                return tuple(self._convert_value(item.strip()) for item in items if item.strip())
+                return val_trimmed[1:-1]
 
-        # 5. Space-Separated Sequences / Mixed Quoted Tokens: '888' 999 "000" or 777 888 999
-        if ' ' in val_trimmed and not ('\n' in val_trimmed):
+        # 6. Space-Separated Sequences / Mixed Quoted Tokens: '888' 999 "000" or 777 888 999
+        if ' ' in val_trimmed and '\n' not in val_trimmed:
             try:
-                import shlex
                 tokens = shlex.split(val_trimmed)
                 if len(tokens) > 1:
                     has_quotes = "'" in val_trimmed or '"' in val_trimmed
@@ -1351,14 +1527,14 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
             except Exception:
                 pass
 
-        # 6. Multiline values
+        # 7. Multiline Values
         if '\n' in val_trimmed:
             items = re.split(r'\n+', val_trimmed)
             return [self._convert_value(item.strip()) for item in items if item.strip()]
 
-        # 7. Key-Value pairs: k1: v1, k2: v2
+        # 8. Key-Value Pairs: k1: v1, k2: v2
         if ':' in val_trimmed and ',' in val_trimmed:
-            pairs = re.split(r',\s*', val_trimmed)
+            pairs = _smart_split(val_trimmed, ',')
             result_dict = {}
             valid_pair = False
             for pair in pairs:
@@ -1369,14 +1545,14 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
             if valid_pair:
                 return result_dict
 
-        # 8. Booleans
+        # 9. Booleans
         lowercased = val_trimmed.lower()
         if lowercased in ('true', 'yes', '1'):
             return True
         elif lowercased in ('false', 'no', '0'):
             return False
 
-        # 9. Numerics (handling leading zeros as integers if unquoted)
+        # 10. Numerics
         if val_trimmed.isdigit() or (val_trimmed.startswith('-') and val_trimmed[1:].isdigit()):
             return int(val_trimmed)
 
@@ -1386,7 +1562,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         except ValueError:
             pass
 
-        # 10. Fallback string
+        # 11. Fallback Raw String
         return value
 
     def _print_colored(self, text: str, element_type: str, value: str = '') -> None:

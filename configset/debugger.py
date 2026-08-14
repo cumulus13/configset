@@ -44,19 +44,19 @@ exceptions = [
 
 LOG_LEVEL = os.getenv('LOG_LEVEL', "CRITICAL")
 SHOW_LOG = False
-if len(sys.argv) > 1 and any('--debug' == arg for arg in sys.argv[1:]) or str(os.getenv('DEBUG', '0')).lower() in ('1', 'true', 'ok', 'on', 'yes'):
-    _print("🐞 Debug mode enabled [GitDate]")
+if len(sys.argv) > 1 and any('--debug' == arg for arg in sys.argv[1:]):
+    _print("🐞 Debug mode enabled \\[CONFIGSET]")
     os.environ["CONFIGSET_DEBUG"] = "1"
     os.environ['LOGGING'] = "1"
     os.environ.pop('NO_LOGGING', None)
-    os.environ['TRACEBACK'] = "1"
     LOG_LEVEL = "DEBUG"
     SHOW_LOG = True
 
 try:
-    if len(sys.argv) > 1 and any('--pydebugger' == arg for arg in sys.argv[1:]) or os.getenv("PYDEBUGGER", '0').lower() in ('1', 'true', 'ok', 'on', 'yes'):
-        _print("debug with'pydebugger' enable")
+    if (len(sys.argv) > 1 and any('--pydebugger' == arg for arg in sys.argv[1:])) or os.getenv("PYDEBUGGER", '0').lower() in ('1', 'true', 'ok', 'on', 'yes'):
+        _print("[CONFIGSET] debug with'pydebugger' enable")
         from pydebugger.debug import debug as debugx
+
         if os.getenv("DEBUG_SERVER") == "1":
             def debug(*args, **kwargs):  # type: ignore  
                 return debugx(*args, **kwargs)
@@ -130,7 +130,8 @@ if not tprint:
         traceback.print_exc()
 
 def is_debug():
-    return str(os.getenv('TRACEBACK', '0')).lower() in ('1', 'true', 'yes', 'ok') or str(os.getenv('CONFIGSET_DEBUG', '0')).lower() in ('1', 'true', 'yes', 'ok')
+    os.environ.pop('TRACEBACK', '0')
+    return str(os.getenv('CONFIGSET_DEBUG', '0')).lower() in ('1', 'true', 'yes', 'ok')
 
 def is_verbose():
     return any(i for i in sys.argv[1:] if i in ['--verbose', '--debug'])

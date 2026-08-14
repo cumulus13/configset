@@ -31,6 +31,15 @@ except:
     except:
         from configset.icons import Icons  # type: ignore
 
+# configset_error
+try:
+    from . configset_error import ConfigurationError  # type: ignore
+except:
+    try:
+        from configset_error import ConfigurationError  # type: ignore
+    except:
+        from configset.configset_error import ConfigurationError  # type: ignore
+
 # printer
 try:
     from . printer import _print  # type: ignore
@@ -130,6 +139,8 @@ def detect_file_type(content: str) -> Any:
             return 'json'
         elif ext in ['.yaml', '.yml']:
             return 'yaml'
+        elif ext == '.toml':
+            return 'toml'
         elif ext == '.ini':
             return 'ini'
             
@@ -151,6 +162,22 @@ def detect_file_type(content: str) -> Any:
             return "json"
         except Exception:
             pass
+
+    # Try TOML detection (checked before YAML, since YAML's safe_load is permissive
+    # enough to sometimes mis-parse TOML-flavored text)
+    try:
+        try:
+            from . configset_toml import _toml_loads as _detect_toml_loads  # type: ignore
+        except Exception:
+            try:
+                from configset_toml import _toml_loads as _detect_toml_loads  # type: ignore
+            except Exception:
+                from configset.configset_toml import _toml_loads as _detect_toml_loads  # type: ignore
+        if _detect_toml_loads is not None and ('=' in data) and not data.lstrip().startswith(('{', '[')):
+            _detect_toml_loads(data)
+            return "toml"
+    except Exception:
+        pass
 
     # Try YAML detection
     try:
@@ -209,15 +236,21 @@ def _validate_file_path(file_path: Union[str, Path]) -> Path:
     except (ValueError, OSError) as e:
         raise ConfigurationError(f"Invalid file path: {e}")
     
-def load_default(data:Any|None=None, default_config:Dict|None=None) -> Dict[str, Any]:
+def load_default(data=None, default_config=None):
+    # type: (Any, Optional[Dict]) -> Dict[str, Any]
     """
-    Load configuration data from various sources: dict, JSON/YAML/INI file paths or strings.
+    Load configuration data from various sources: dict, JSON/YAML/TOML/INI file paths or strings.
     
     Supports:
     - Dict input
-    - File paths ending in .json/.yaml/.yml/.ini
-    - Raw JSON/YAML/INI strings
-    
+    - File paths ending in .json/.yaml/.yml/.toml/.ini
+    - Raw JSON/YAML/TOML/INI strings
+
+    Note: the parameter annotations above are intentionally written as a comment-style
+    type hint (rather than `data: Any | None = None`) so this module keeps importing on
+    Python versions before 3.10, which don't support the `X | Y` union syntax in a
+    default-value position without `from __future__ import annotations`.
+
     Returns:
     - A dictionary representation of the config.
     """
@@ -228,7 +261,7 @@ def load_default(data:Any|None=None, default_config:Dict|None=None) -> Dict[str,
     if not data and default_config:
         return default_config if isinstance(default_config, dict) else {}
 
-    valid_ext = (".ini", ".json", ".yaml", ".yml")
+    valid_ext = (".ini", ".json", ".yaml", ".yml", ".toml")
     default_config = {}
 
     if isinstance(data, bytes):
@@ -247,6 +280,20 @@ def load_default(data:Any|None=None, default_config:Dict|None=None) -> Dict[str,
                     elif ext in (".yaml", ".yml"):
                         with open(data, 'r', encoding='utf-8') as f:
                             default_config = yaml.safe_load(f)
+                    elif ext == ".toml":
+                        try:
+                            from . configset_toml import _toml_loads  # type: ignore
+                        except Exception:
+                            try:
+                                from configset_toml import _toml_loads  # type: ignore
+                            except Exception:
+                                from configset.configset_toml import _toml_loads  # type: ignore
+                        if _toml_loads is None:
+                            raise ConfigurationError(
+                                "No TOML reader available (install 'tomli' or 'toml') "
+                                "to load default config from a .toml file")
+                        with open(data, 'r', encoding='utf-8') as f:
+                            default_config = _toml_loads(f.read())
                     elif ext == ".ini":
                         import configparser
                         config = configparser.ConfigParser()

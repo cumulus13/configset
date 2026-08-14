@@ -82,7 +82,7 @@ __version__ = get_version()
 __platform__ = "all"
 __contact__ = "cumulus13@gmail.com"
 __author__ = "Hadi Cahyadi"
-__all__ = ["ConfigSet", "CONFIG", "MultiOrderedDict", "__version__", "get_version", "ConfigSetIni", "ConfigSetYaml", "ConfigSetJson", "detect_file_type", "_validate_file_path", "ConfigMeta"]
+__all__ = ["ConfigSet", "CONFIG", "MultiOrderedDict", "__version__", "get_version", "ConfigSetIni", "ConfigSetYaml", "ConfigSetJson", "ConfigSetToml", "detect_file_type", "_validate_file_path", "ConfigMeta"]
 
 # configset_general
 try:
@@ -119,6 +119,15 @@ except:
         from configset_yaml import ConfigSetYaml  # type: ignore
     except:
         from configset.configset_yaml import ConfigSetYaml  # type: ignore
+
+# configset_toml
+try:
+    from . configset_toml import ConfigSetToml  # type: ignore
+except:
+    try:
+        from configset_toml import ConfigSetToml  # type: ignore
+    except:
+        from configset.configset_toml import ConfigSetToml  # type: ignore
 
 
 class MultiOrderedDict(OrderedDict):
@@ -162,6 +171,14 @@ class ConfigSetJSON(ConfigSetJson):
 
 class configsetjson(ConfigSetJson):
     """Alias for ConfigSetJson with lowercase naming."""
+    pass
+
+class ConfigSetTOML(ConfigSetToml):
+    """Alias for ConfigSetToml with uppercase naming."""
+    pass
+
+class configsettoml(ConfigSetToml):
+    """Alias for ConfigSetToml with lowercase naming."""
     pass
 
 # small helper proxies for nicer dot-access with INI backend
@@ -405,6 +422,9 @@ class ConfigSet:
                     p.write_text("{}", encoding="utf-8")
                 elif ext == ".ini":
                     p.write_text("", encoding="utf-8")
+                elif ext == ".toml":
+                    # "{}" is not valid TOML; an empty document is.
+                    p.write_text("", encoding="utf-8")
                 else:
                     # default to JSON
                     p.write_text("{}", encoding="utf-8")
@@ -416,6 +436,7 @@ class ConfigSet:
         
         file_type = detect_file_type(str(p)) or (
             "yaml" if p.suffix.lower() in (".yaml", ".yml") else
+            "toml" if p.suffix.lower() == ".toml" else
             "ini" if p.suffix.lower() == ".ini" else
             "json"
         )
@@ -443,6 +464,10 @@ class ConfigSet:
             return ConfigSetJSON(json_file=file_path, **kwargs)
         if file_type in ('yaml', 'yml'):
             return ConfigSetYAML(yaml_file=file_path, **kwargs)
+        if file_type == 'toml':
+            return ConfigSetTOML(toml_file=file_path, **kwargs)
+        if file_path.endswith(".toml"):
+            return ConfigSetTOML(toml_file=file_path, **kwargs)
         if file_path.endswith(".json"):
             return ConfigSetJSON(json_file=file_path, **kwargs)
         if file_path.endswith((".yaml", ".yml")):

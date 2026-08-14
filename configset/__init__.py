@@ -72,6 +72,8 @@ from .configset import (
     ConfigSetYAML,
     ConfigSetIni,
     ConfigSetINI,
+    ConfigSetToml,
+    ConfigSetTOML,
     
 )
 
@@ -138,6 +140,8 @@ __all__ = [
     "ConfigSetIni", 
     "ConfigSetYaml", 
     "ConfigSetJson", 
+    "ConfigSetToml",
+    "ConfigSetTOML",
     "detect_file_type",
     "_validate_file_path",
     "ConfigMeta",

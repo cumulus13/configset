@@ -39,3 +39,5 @@ test/
 
 # Ignore Sublime Text project files
 *.sublime-*
+# PT backup directory
+.pt/
