@@ -676,7 +676,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
             return None  # Matches docstring specification
         
     def get_config(self, section: str, option: str = '', 
-                  default: Any = None, auto_write: bool = False, value: Any = None, _skip_reload=False) -> Any:
+                  default: Any = None, auto_write: bool = False, value: Any = None, _skip_reload=False, fallback: Any = None) -> Any:
         """
         Get configuration value with automatic type conversion.
         This method retrieves a configuration value, applying type conversion as needed.
@@ -706,7 +706,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         # auto_write = auto_write or self._auto_write
             
         try:
-            value = super().get(section, option)
+            value = super().get(section, option, fallback=fallback)
             if is_debug(): _print(f"value: {value}")
             return self._convert_value(value)
         except (configparser.NoSectionError, configparser.NoOptionError):
