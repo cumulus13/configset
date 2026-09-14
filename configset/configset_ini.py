@@ -708,7 +708,9 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
         try:
             value = super().get(section, option, fallback=fallback)
             if is_debug(): _print(f"value: {value}")
-            return self._convert_value(value)
+            # if not value and default:
+            #     return default
+            return self._convert_value(value, default)
         except (configparser.NoSectionError, configparser.NoOptionError):
             if auto_write and default is not None:
                 self.write_config(section, option, default)
@@ -1069,7 +1071,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
                    (item.startswith("'") and item.endswith("'")):
                     result.append(item[1:-1])
                 else:
-                    result.append(self._convert_value(item))
+                    result.append(self._convert_value(item, default))
             
             return result
         
@@ -1118,7 +1120,7 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
                     key, value = pair.split(':', 1)
                     key = key.strip()
                     value = value.strip()
-                    result[key] = self._convert_value(value)
+                    result[key] = self._convert_value(value, default)
             
             return result
         
@@ -1389,8 +1391,9 @@ class ConfigSetIni(configparser.RawConfigParser): # type: ignore
     #     # 10. Fallback string
     #     return value
 
-    def _convert_value(self, value: Any) -> Any:
+    def _convert_value(self, value: Any, default: Any|str = '') -> Any:
         """Convert string values into tuple, list, dict, bool, int, float, or str."""
+        value = value or default
         if not isinstance(value, str):
             return value
 
